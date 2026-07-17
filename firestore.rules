@@ -1,0 +1,114 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    function isGroupAdmin(groupId) {
+      let groupData = get(/databases/$(database)/documents/groups/$(groupId)).data;
+      return request.auth.uid == groupData.createdBy || request.auth.uid in groupData.get('admins', []);
+    }
+
+    function isGroupMember(groupId) {
+      let groupData = get(/databases/$(database)/documents/groups/$(groupId)).data;
+      return request.auth.uid in groupData.get('members', []);
+    }
+
+    // Users collection - users can only read/write their own data
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Groups collection
+    match /groups/{groupId} {
+      // Allow anyone to view a specific group (for public link)
+      allow get: if true;
+      // Allow public list access (needed for searching by code, but we might want to restrict full list? 
+      // For now, allow list if true to support guest view of group lists if needed, 
+      // but primarily for 'get'. Actually, 'list' is needed for queries.
+      allow list: if true;
+      
+      // Only group creator can create
+      allow create: if request.auth != null && 
+                       request.auth.uid == request.resource.data.createdBy;
+      
+      // Admins or creator can update (fallback to creator for old groups without admins)
+      // Also allow users to join (add themselves to members)
+      allow update: if request.auth != null && 
+                       (
+                        request.auth.uid in resource.data.get('admins', []) ||
+                        request.auth.uid == resource.data.createdBy ||
+                        (
+                          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members']) &&
+                          request.resource.data.members.hasAll(resource.data.members) &&
+                          request.resource.data.members.size() == resource.data.members.size() + 1 &&
+                          request.auth.uid in request.resource.data.members
+                        )
+                       );
+      
+      // Only creator can delete
+      allow delete: if request.auth != null && 
+                       request.auth.uid == resource.data.createdBy;
+    }
+
+    // Join Requests collection
+    match /joinRequests/{requestId} {
+        allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+        
+        allow read: if request.auth != null && (
+          request.auth.uid == resource.data.userId || 
+          isGroupAdmin(resource.data.groupId)
+        );
+
+        allow update: if request.auth != null && isGroupAdmin(resource.data.groupId);
+    }
+    
+    // Matches collection
+    match /matches/{matchId} {
+      // Allow public read access to matches
+      allow read: if true;
+      
+      // Only group admins can create matches
+      allow create: if request.auth != null && 
+                       request.resource.data.groupId != null &&
+                       isGroupAdmin(request.resource.data.groupId);
+      
+      // Only group admins can update or delete
+      // Allow regular group members to update ONLY 'ratings' field for voting
+      allow update: if request.auth != null && 
+                       (
+                         isGroupAdmin(resource.data.groupId) ||
+                         (
+                           isGroupMember(resource.data.groupId) &&
+                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ratings'])
+                         )
+                       );
+      
+      allow delete: if request.auth != null && isGroupAdmin(resource.data.groupId);
+    }
+    
+    // Invitations collection
+    match /invitations/{invitationId} {
+      // Users can read invitations sent to them or created by them
+      allow read: if request.auth != null && 
+                     (request.auth.token.email == resource.data.email || 
+                      request.auth.uid == resource.data.invitedBy);
+      
+      // Group admins can create invitations
+      allow create: if request.auth != null && 
+                       (
+                         request.auth.uid in get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.get('admins', []) ||
+                         request.auth.uid == get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.createdBy
+                       );
+      
+      // Invitee can update (accept/reject)
+      allow update: if request.auth != null && 
+                       request.auth.token.email == resource.data.email;
+      
+      // Creator or invitee can delete
+      allow delete: if request.auth != null && 
+                       (request.auth.uid == resource.data.invitedBy || 
+                        request.auth.token.email == resource.data.email);
+    }
+  }
+}
+

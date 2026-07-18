@@ -31,6 +31,17 @@ try {
 }
 
 export const auth = getAuth(app);
-const dbId = import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || "ai-studio-halisahaprojesi-1ab48f9b-b25a-46f5-b5c5-beb8cefaf988";
+
+const getDatabaseId = () => {
+    if (typeof window !== 'undefined') {
+        const savedDbId = localStorage.getItem('halisaha_db_id');
+        if (savedDbId) {
+            return savedDbId === 'default' ? '' : savedDbId;
+        }
+    }
+    return import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || "ai-studio-halisahaprojesi-1ab48f9b-b25a-46f5-b5c5-beb8cefaf988";
+};
+
+const dbId = getDatabaseId();
 export const db = dbId && dbId !== "default" ? getFirestore(app, dbId) : getFirestore(app);
 export { _analytics as analytics };

@@ -26,6 +26,23 @@ const Profile = () => {
         }
     });
     const [message, setMessage] = useState(null);
+    const [currentDb, setCurrentDb] = useState(() => {
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('halisaha_db_id') || 'ai-studio-halisahaprojesi-1ab48f9b-b25a-46f5-b5c5-beb8cefaf988';
+        }
+        return 'ai-studio-halisahaprojesi-1ab48f9b-b25a-46f5-b5c5-beb8cefaf988';
+    });
+
+    const handleSwitchDb = (newDbId) => {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('halisaha_db_id', newDbId);
+            setCurrentDb(newDbId);
+            setMessage({ type: 'success', text: 'Veritabanı başarıyla değiştirildi. Sayfa yenileniyor...' });
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500);
+        }
+    };
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -383,6 +400,61 @@ const Profile = () => {
                             </div>
                         </div>
                     )}
+
+                    {/* Veritabanı Seçimi (Eski Verileri Kurtarma) */}
+                    <div style={{ marginTop: '2rem', borderTop: '1px solid var(--border-color)', paddingTop: '2rem' }}>
+                        <h3 style={{ fontSize: '1.2rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-primary)' }}>
+                            <Database size={20} color="var(--accent-primary)" />
+                            Veritabanı Ayarları (Eski Veri Kurtarma)
+                        </h3>
+                        <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '1.5rem', lineHeight: '1.5' }}>
+                            Uygulama güncellendiğinde veya yeni veritabanı tahsis edildiğinde eski gruplarınız ve maç kayıtlarınız geçici olarak görünmeyebilir. Aşağıdan eski (Varsayılan) veya yeni (Özel) veritabanına geçiş yaparak eski verilerinize anında ulaşabilirsiniz.
+                        </p>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                            <button
+                                type="button"
+                                onClick={() => handleSwitchDb('default')}
+                                style={{
+                                    padding: '1rem',
+                                    borderRadius: 'var(--radius-md)',
+                                    background: currentDb === 'default' ? 'var(--accent-primary)' : 'rgba(255, 255, 255, 0.05)',
+                                    color: currentDb === 'default' ? '#000' : 'var(--text-primary)',
+                                    border: currentDb === 'default' ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                                    fontWeight: 'bold',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    gap: '0.25rem'
+                                }}
+                            >
+                                <span style={{ fontSize: '1rem' }}>Eski Veritabanı (Varsayılan)</span>
+                                <span style={{ fontSize: '0.75rem', opacity: 0.8, fontWeight: 'normal' }}>Önceki Gruplar & Maçlar</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleSwitchDb('ai-studio-halisahaprojesi-1ab48f9b-b25a-46f5-b5c5-beb8cefaf988')}
+                                style={{
+                                    padding: '1rem',
+                                    borderRadius: 'var(--radius-md)',
+                                    background: currentDb === 'ai-studio-halisahaprojesi-1ab48f9b-b25a-46f5-b5c5-beb8cefaf988' ? 'var(--accent-primary)' : 'rgba(255, 255, 255, 0.05)',
+                                    color: currentDb === 'ai-studio-halisahaprojesi-1ab48f9b-b25a-46f5-b5c5-beb8cefaf988' ? '#000' : 'var(--text-primary)',
+                                    border: currentDb === 'ai-studio-halisahaprojesi-1ab48f9b-b25a-46f5-b5c5-beb8cefaf988' ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                                    fontWeight: 'bold',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    gap: '0.25rem'
+                                }}
+                            >
+                                <span style={{ fontSize: '1rem' }}>Yeni Veritabanı (Özel)</span>
+                                <span style={{ fontSize: '0.75rem', opacity: 0.8, fontWeight: 'normal' }}>Güncel Altyapı</span>
+                            </button>
+                        </div>
+                    </div>
 
                     <div style={{ marginTop: '2rem', borderTop: '1px solid var(--border-color)', paddingTop: '2rem' }}>
                         <button

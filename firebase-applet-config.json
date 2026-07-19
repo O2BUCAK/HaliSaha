@@ -3,7 +3,7 @@
   "appId": "1:142695896602:web:227c2f31c07f12820823a3",
   "apiKey": "AIzaSyBuykPO_0K1aG7ALHsc3rFiGWr0G-tiLQk",
   "authDomain": "halisaha-projesi-b057b.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-halisahaprojesi-1ab48f9b-b25a-46f5-b5c5-beb8cefaf988",
+  "firestoreDatabaseId": "default",
   "storageBucket": "halisaha-projesi-b057b.firebasestorage.app",
   "messagingSenderId": "142695896602",
   "measurementId": "",

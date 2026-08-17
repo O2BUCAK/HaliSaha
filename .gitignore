@@ -23,8 +23,16 @@ dist-ssr
 *.sln
 *.sw?
 
-# Environment variables
+# Environment variables & Secrets
 .env
-.env.local
-.env.production
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+serviceAccountKey.json
+google-services.json
+firebase-adminsdk*.json
+credentials.json
+sec*.json
 

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -11,14 +10,13 @@ const Register = () => {
         description: 'Halı Saha İstatistik Platformu\'na katılın. Arkadaşlarınızla liginizi oluşturun, oyuncuları puanlayın ve gol/asist krallığı yarışını başlatın.'
     });
 
-    const [step, setStep] = useState('register'); // 'register' | 'verify'
     const [name, setName] = useState('');
     const [nickname, setNickname] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [verificationCode, setVerificationCode] = useState('');
+    const [honeypot, setHoneypot] = useState(''); // Anti-bot honeypot field
     const [error, setError] = useState('');
-    const { register, verifyEmail, loginWithGoogle } = useAuth();
+    const { register, loginWithGoogle } = useAuth();
     const navigate = useNavigate();
 
     const validatePassword = (pwd) => {
@@ -40,6 +38,12 @@ const Register = () => {
         e.preventDefault();
         setError('');
 
+        // Bot trap: if honeypot is filled, silently reject or abort
+        if (honeypot) {
+            console.warn("Bot activity detected and blocked.");
+            return;
+        }
+
         const passwordError = validatePassword(password);
         if (passwordError) {
             setError(passwordError);
@@ -47,24 +51,6 @@ const Register = () => {
         }
 
         const result = await register(name, nickname, email, password);
-        if (result.success) {
-            if (result.requiresVerification) {
-                setStep('verify');
-                // Simulate sending email
-                alert(`DEMO: Doğrulama kodunuz: ${result.demoCode} `);
-
-            } else {
-                navigate('/dashboard');
-            }
-        } else {
-            setError(result.error);
-        }
-    };
-
-    const handleVerify = async (e) => {
-        e.preventDefault();
-        setError('');
-        const result = await verifyEmail(email, verificationCode);
         if (result.success) {
             navigate('/dashboard');
         } else {
@@ -81,66 +67,6 @@ const Register = () => {
             setError(result.error || 'Google ile giriş yapılamadı.');
         }
     };
-
-    if (step === 'verify') {
-        return (
-            <div className="flex-center" style={{ minHeight: '80vh' }}>
-                <div className="card" style={{ width: '100%', maxWidth: '400px', textAlign: 'center' }}>
-                    <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'center' }}>
-                        <div style={{ padding: '1rem', borderRadius: '50%', background: 'rgba(34, 197, 94, 0.1)', color: 'var(--accent-success)' }}>
-                            <Mail size={32} />
-                        </div>
-                    </div>
-                    <h2 style={{ marginBottom: '0.5rem', fontSize: '1.5rem' }}>E-posta Doğrulama</h2>
-                    <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
-                        {email} adresine gönderilen 6 haneli kodu giriniz.
-                        <br />
-                        <small>(Demo: Kod ekrana gelen uyarıda yazmaktadır)</small>
-                    </p>
-
-                    {error && (
-                        <div style={{
-                            background: 'rgba(239, 68, 68, 0.1)',
-                            color: 'var(--accent-danger)',
-                            padding: '0.75rem',
-                            borderRadius: 'var(--radius-md)',
-                            marginBottom: '1rem',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5rem',
-                            fontSize: '0.9rem',
-                            justifyContent: 'center'
-                        }}>
-                            <AlertCircle size={18} />
-                            {error}
-                        </div>
-                    )}
-
-                    <form onSubmit={handleVerify}>
-                        <div style={{ marginBottom: '1.5rem' }}>
-                            <input
-                                type="text"
-                                value={verificationCode}
-                                onChange={(e) => setVerificationCode(e.target.value)}
-                                required
-                                placeholder="123456"
-                                maxLength="6"
-                                style={{
-                                    textAlign: 'center',
-                                    letterSpacing: '0.5rem',
-                                    fontSize: '1.5rem',
-                                    fontWeight: 'bold'
-                                }}
-                            />
-                        </div>
-                        <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
-                            Doğrula ve Giriş Yap
-                        </button>
-                    </form>
-                </div>
-            </div>
-        );
-    }
 
     return (
         <div className="flex-center" style={{ minHeight: '80vh' }}>
@@ -165,6 +91,18 @@ const Register = () => {
                 )}
 
                 <form onSubmit={handleSubmit}>
+                    {/* Hidden Honeypot Field for Bot Protection */}
+                    <div style={{ display: 'none', position: 'absolute', left: '-9999px' }} aria-hidden="true">
+                        <input
+                            type="text"
+                            name="website_url_hp"
+                            tabIndex={-1}
+                            autoComplete="off"
+                            value={honeypot}
+                            onChange={(e) => setHoneypot(e.target.value)}
+                        />
+                    </div>
+
                     <div style={{ marginBottom: '1rem' }}>
                         <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Ad Soyad</label>
                         <div style={{ position: 'relative' }}>
@@ -174,6 +112,7 @@ const Register = () => {
                                 value={name}
                                 onChange={(e) => setName(toTitleCase(e.target.value))}
                                 required
+                                maxLength={100}
                                 placeholder="Adınız Soyadınız"
                                 style={{ paddingLeft: '3rem' }}
                             />
@@ -188,6 +127,7 @@ const Register = () => {
                                 type="text"
                                 value={nickname}
                                 onChange={(e) => setNickname(e.target.value)}
+                                maxLength={50}
                                 placeholder="Örn: Messi10 (İsteğe Bağlı)"
                                 style={{ paddingLeft: '3rem' }}
                             />
@@ -203,6 +143,7 @@ const Register = () => {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
+                                maxLength={120}
                                 placeholder="ornek@email.com"
                                 style={{ paddingLeft: '3rem' }}
                             />
@@ -218,6 +159,7 @@ const Register = () => {
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
+                                maxLength={128}
                                 placeholder="••••••••"
                                 style={{ paddingLeft: '3rem' }}
                             />

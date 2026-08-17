@@ -12,6 +12,7 @@ const Login = () => {
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [honeypot, setHoneypot] = useState('');
     const [error, setError] = useState('');
     const { login, loginWithGoogle } = useAuth();
     const navigate = useNavigate();
@@ -19,6 +20,12 @@ const Login = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
+
+        if (honeypot) {
+            console.warn("Bot activity detected.");
+            return;
+        }
+
         const result = await login(email, password);
         if (result.success) {
             navigate('/dashboard');
@@ -60,6 +67,18 @@ const Login = () => {
                 )}
 
                 <form onSubmit={handleSubmit}>
+                    {/* Hidden Honeypot Field for Bot Trap */}
+                    <div style={{ display: 'none', position: 'absolute', left: '-9999px' }} aria-hidden="true">
+                        <input
+                            type="text"
+                            name="login_bot_hp"
+                            tabIndex={-1}
+                            autoComplete="off"
+                            value={honeypot}
+                            onChange={(e) => setHoneypot(e.target.value)}
+                        />
+                    </div>
+
                     <div style={{ marginBottom: '1rem' }}>
                         <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>E-posta</label>
                         <div style={{ position: 'relative' }}>
@@ -69,6 +88,7 @@ const Login = () => {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
+                                maxLength={120}
                                 placeholder="ornek@email.com"
                                 style={{ paddingLeft: '3rem' }}
                             />
@@ -84,6 +104,7 @@ const Login = () => {
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
+                                maxLength={128}
                                 placeholder="••••••••"
                                 style={{ paddingLeft: '3rem' }}
                             />

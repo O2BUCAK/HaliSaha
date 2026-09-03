@@ -13,6 +13,7 @@ import {
     arrayRemove,
     getDocs,
     getDoc,
+    deleteField,
     serverTimestamp
 } from 'firebase/firestore';
 import { toTitleCase } from '../utils';
@@ -530,30 +531,47 @@ export const DataProvider = ({ children }) => {
     const givePlayerRating = async (matchId, targetPlayerId, score) => {
         try {
             if (!currentUser) return { success: false, error: 'Giriş yapmalısınız.' };
-            const voterId = currentUser.uid || currentUser.id;
+            const voterId = String(currentUser.uid || currentUser.id);
 
-            if (targetPlayerId === voterId) return { success: false, error: 'Kendinize puan veremezsiniz.' };
+            if (String(targetPlayerId) === voterId) {
+                return { success: false, error: 'Kendinize puan veremezsiniz.' };
+            }
 
             const matchRef = doc(db, 'matches', matchId);
-            const matchSnap = await getDoc(matchRef);
-            if (!matchSnap.exists()) return { success: false, error: 'Maç bulunamadı.' };
-
-            // Allow if match is finished ? Usually ratings are given after match.
-            // But let's allow it anytime for now.
-
-            // Construct update path: ratings.{targetPlayerId}.{voterId}
-            // We use a map: ratings: { targetId: { voterId: score } }
-
             const updateKey = `ratings.${targetPlayerId}.${voterId}`;
 
-            await updateDoc(matchRef, {
-                [updateKey]: score
-            });
+            const parsedScore = parseInt(score, 10);
+            const isRemoving = score === '' || score === null || score === undefined || isNaN(parsedScore);
+
+            if (isRemoving) {
+                await updateDoc(matchRef, {
+                    [updateKey]: deleteField()
+                });
+            } else {
+                const finalScore = Math.max(1, Math.min(10, parsedScore));
+                await updateDoc(matchRef, {
+                    [updateKey]: finalScore
+                });
+            }
+
+            // Optimistically update local matches state if present
+            setMatches(prevMatches => prevMatches.map(m => {
+                if (m.id !== matchId) return m;
+                const matchRatings = { ...(m.ratings || {}) };
+                const playerRatings = { ...(matchRatings[targetPlayerId] || {}) };
+                if (isRemoving) {
+                    delete playerRatings[voterId];
+                } else {
+                    playerRatings[voterId] = Math.max(1, Math.min(10, parsedScore));
+                }
+                matchRatings[targetPlayerId] = playerRatings;
+                return { ...m, ratings: matchRatings };
+            }));
 
             return { success: true };
         } catch (error) {
             console.error("Error giving rating:", error);
-            return { success: false, error: 'Puan verilirken hata oluştu.' };
+            return { success: false, error: error.message || 'Puan verilirken hata oluştu.' };
         }
     };
 

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../../firebase';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Trophy, Save, Users, UserPlus, Video, FileText, ExternalLink, Hand, Share2, Star, Trash2, Plus, ArrowLeft } from 'lucide-react';
@@ -18,8 +20,22 @@ const MatchDetail = () => {
     // If we don't have the match in context, we need to load it.
     const [loading, setLoading] = useState(!contextMatch && !!matchId);
 
-    const match = contextMatch || fetchedMatch;
+    const match = fetchedMatch || contextMatch;
     const group = contextGroup || fetchedGroup;
+
+    // Real-time listener for current match document to capture ratings live
+    useEffect(() => {
+        if (!matchId) return;
+        const matchRef = doc(db, 'matches', matchId);
+        const unsubscribe = onSnapshot(matchRef, (docSnap) => {
+            if (docSnap.exists()) {
+                setFetchedMatch({ id: docSnap.id, ...docSnap.data() });
+            }
+        }, (err) => {
+            console.error("Match listener error:", err);
+        });
+        return () => unsubscribe();
+    }, [matchId]);
 
     // Fetch match/group data if not in context
     useEffect(() => {
@@ -44,7 +60,7 @@ const MatchDetail = () => {
             };
             loadData();
         }
-    }, [matchId, contextMatch]);
+    }, [matchId, contextMatch, groups, fetchGroup, fetchMatch]);
 
     const [scoreA, setScoreA] = useState(match?.score?.a || 0);
     const [scoreB, setScoreB] = useState(match?.score?.b || 0);
@@ -64,6 +80,13 @@ const MatchDetail = () => {
 
     const [isEditing, setIsEditing] = useState(match?.status !== 'played');
     const [memberDetails, setMemberDetails] = useState([]);
+    const [localRatings, setLocalRatings] = useState({});
+
+    useEffect(() => {
+        if (match?.ratings) {
+            setLocalRatings(match.ratings);
+        }
+    }, [match?.ratings]);
 
     useEffect(() => {
         if (match) {
@@ -177,16 +200,10 @@ const MatchDetail = () => {
     };
 
     // Rating Logic
-    const ratings = match?.ratings || {};
-
-    // Check if current user is a player in the match (Auth user only)
-    const isPlayerInMatch = currentUser && (
-        teamA.some(p => p.id === (currentUser.uid || currentUser.id)) ||
-        teamB.some(p => p.id === (currentUser.uid || currentUser.id))
-    );
+    const activeRatings = localRatings || match?.ratings || {};
 
     const getPlayerRatingData = (playerId) => {
-        const playerRatings = ratings[playerId] || {};
+        const playerRatings = activeRatings[playerId] || {};
         const votes = Object.values(playerRatings);
         if (votes.length === 0) return { average: '-', count: 0 };
         const sum = votes.reduce((a, b) => a + b, 0);
@@ -194,16 +211,33 @@ const MatchDetail = () => {
     };
 
     const getMyVote = (playerId) => {
-        if (!currentUser) return '';
-        const playerRatings = ratings[playerId] || {};
-        return playerRatings[currentUser.uid || currentUser.id] || '';
+        if (!currentUserId) return '';
+        const playerRatings = activeRatings[playerId] || {};
+        const vote = playerRatings[currentUserId];
+        return vote !== undefined && vote !== null ? String(vote) : '';
     };
 
     const handleRate = async (playerId, score) => {
-        if (!currentUser) return;
-        const result = await givePlayerRating(matchId, playerId, parseInt(score));
+        if (!currentUserId) return;
+
+        const val = score === '' ? '' : parseInt(score, 10);
+
+        // Optimistically update local UI immediately
+        setLocalRatings(prev => {
+            const next = { ...prev };
+            const playerVotes = { ...(next[playerId] || {}) };
+            if (val === '' || isNaN(val)) {
+                delete playerVotes[currentUserId];
+            } else {
+                playerVotes[currentUserId] = val;
+            }
+            next[playerId] = playerVotes;
+            return next;
+        });
+
+        const result = await givePlayerRating(matchId, playerId, score);
         if (!result.success) {
-            // alert(result.error);
+            alert(result.error || 'Puan verilirken bir hata oluştu.');
         }
     };
 
@@ -449,145 +483,6 @@ const MatchDetail = () => {
                 </div>
             )}
 
-            {/* Player Voting Module */}
-            {isPlayerInMatch && !isEditing && (
-                <div className="card" style={{ marginBottom: '2rem', background: 'var(--bg-secondary)', border: '1px solid var(--accent-primary)', position: 'relative', overflow: 'hidden' }}>
-                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: 'linear-gradient(90deg, var(--accent-primary), var(--accent-secondary))' }} />
-                    
-                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', color: 'var(--text-primary)', fontSize: '1.25rem' }}>
-                        <Star size={20} fill="var(--accent-primary)" color="var(--accent-primary)" />
-                        Oyuncu Değerlendirme & Puanlama
-                    </h3>
-                    <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
-                        Bu maçta forma giydiğiniz için takım arkadaşlarınızı ve rakiplerinizi oylayabilirsiniz. Verdiğiniz puanlar oyuncu istatistiklerine anında yansır.
-                    </p>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
-                        {/* Team A Voting */}
-                        <div>
-                            <h4 style={{ color: 'var(--accent-primary)', fontSize: '1rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
-                                {teamAName} Oyuncuları
-                            </h4>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                {teamA
-                                    .filter(p => p.id !== (currentUser?.uid || currentUser?.id))
-                                    .map(player => {
-                                        const currentVote = getMyVote(player.id);
-                                        return (
-                                            <div key={player.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.75rem', borderRadius: 'var(--radius-md)', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <span style={{ fontWeight: '500', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                        {player.name}
-                                                        {player.isGoalkeeper && <Hand size={14} fill="gold" color="gold" />}
-                                                    </span>
-                                                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                                        {currentVote ? `Puanınız: ${currentVote}/10` : 'Puan Verilmedi'}
-                                                    </span>
-                                                </div>
-                                                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
-                                                    {[...Array(10)].map((_, i) => {
-                                                        const val = i + 1;
-                                                        const isSelected = parseInt(currentVote) === val;
-                                                        return (
-                                                            <button
-                                                                key={val}
-                                                                onClick={() => handleRate(player.id, val)}
-                                                                style={{
-                                                                    flex: '1',
-                                                                    minWidth: '24px',
-                                                                    height: '32px',
-                                                                    borderRadius: '4px',
-                                                                    border: isSelected ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
-                                                                    background: isSelected ? 'var(--accent-primary)' : 'transparent',
-                                                                    color: isSelected ? '#000' : 'var(--text-primary)',
-                                                                    fontSize: '0.8rem',
-                                                                    fontWeight: 'bold',
-                                                                    cursor: 'pointer',
-                                                                    transition: 'all 0.2s ease',
-                                                                    display: 'flex',
-                                                                    alignItems: 'center',
-                                                                    justifyContent: 'center'
-                                                                }}
-                                                                title={`${val} Puan Ver`}
-                                                            >
-                                                                {val}
-                                                            </button>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                {teamA.filter(p => p.id !== (currentUser?.uid || currentUser?.id)).length === 0 && (
-                                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Değerlendirilecek oyuncu bulunamadı.</p>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Team B Voting */}
-                        <div>
-                            <h4 style={{ color: 'var(--accent-secondary)', fontSize: '1rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
-                                {teamBName} Oyuncuları
-                            </h4>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                {teamB
-                                    .filter(p => p.id !== (currentUser?.uid || currentUser?.id))
-                                    .map(player => {
-                                        const currentVote = getMyVote(player.id);
-                                        return (
-                                            <div key={player.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.75rem', borderRadius: 'var(--radius-md)', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <span style={{ fontWeight: '500', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                        {player.name}
-                                                        {player.isGoalkeeper && <Hand size={14} fill="gold" color="gold" />}
-                                                    </span>
-                                                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                                        {currentVote ? `Puanınız: ${currentVote}/10` : 'Puan Verilmedi'}
-                                                    </span>
-                                                </div>
-                                                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
-                                                    {[...Array(10)].map((_, i) => {
-                                                        const val = i + 1;
-                                                        const isSelected = parseInt(currentVote) === val;
-                                                        return (
-                                                            <button
-                                                                key={val}
-                                                                onClick={() => handleRate(player.id, val)}
-                                                                style={{
-                                                                    flex: '1',
-                                                                    minWidth: '24px',
-                                                                    height: '32px',
-                                                                    borderRadius: '4px',
-                                                                    border: isSelected ? '1px solid var(--accent-secondary)' : '1px solid var(--border-color)',
-                                                                    background: isSelected ? 'var(--accent-secondary)' : 'transparent',
-                                                                    color: isSelected ? '#000' : 'var(--text-primary)',
-                                                                    fontSize: '0.8rem',
-                                                                    fontWeight: 'bold',
-                                                                    cursor: 'pointer',
-                                                                    transition: 'all 0.2s ease',
-                                                                    display: 'flex',
-                                                                    alignItems: 'center',
-                                                                    justifyContent: 'center'
-                                                                }}
-                                                                title={`${val} Puan Ver`}
-                                                            >
-                                                                {val}
-                                                            </button>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                {teamB.filter(p => p.id !== (currentUser?.uid || currentUser?.id)).length === 0 && (
-                                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Değerlendirilecek oyuncu bulunamadı.</p>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
             {/* Player Stats */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
                 {/* Team A Stats */}
@@ -644,27 +539,31 @@ const MatchDetail = () => {
                                     )}
                                 </div>
                                 {/* Rating Column */}
-                                <div style={{ marginLeft: '1rem', minWidth: '80px', textAlign: 'center' }}>
-                                    <label style={{ fontSize: '0.7rem', display: 'block', color: 'var(--text-secondary)' }}>Puan</label>
+                                <div style={{ marginLeft: '1rem', minWidth: '90px', textAlign: 'center' }}>
+                                    <label style={{ fontSize: '0.7rem', display: 'block', color: 'var(--text-secondary)' }}>
+                                        Puan {getPlayerRatingData(player.id).count > 0 ? `(${getPlayerRatingData(player.id).count})` : ''}
+                                    </label>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
                                         <span style={{ fontWeight: 'bold', color: 'var(--accent-primary)' }}>
                                             {getPlayerRatingData(player.id).average}
                                         </span>
                                         <Star size={12} fill="var(--accent-primary)" color="var(--accent-primary)" />
                                         {/* Vote Input */}
-                                        {isPlayerInMatch && player.id !== (currentUser.uid || currentUser.id) && !isEditing && (
+                                        {currentUser && String(player.id) !== currentUserId && !isEditing && (
                                             <select
                                                 value={getMyVote(player.id)}
                                                 onChange={(e) => handleRate(player.id, e.target.value)}
+                                                title="Oyuncuya 1-10 arası puan verin"
                                                 style={{
                                                     marginLeft: '4px',
-                                                    width: '40px',
+                                                    width: '42px',
                                                     padding: '2px',
                                                     fontSize: '0.8rem',
                                                     borderRadius: '4px',
                                                     border: '1px solid var(--border-color)',
                                                     background: 'var(--bg-secondary)',
-                                                    color: 'var(--text-primary)'
+                                                    color: 'var(--text-primary)',
+                                                    cursor: 'pointer'
                                                 }}
                                             >
                                                 <option value="">-</option>
@@ -734,27 +633,31 @@ const MatchDetail = () => {
                                     )}
                                 </div>
                                 {/* Rating Column */}
-                                <div style={{ marginLeft: '1rem', minWidth: '80px', textAlign: 'center' }}>
-                                    <label style={{ fontSize: '0.7rem', display: 'block', color: 'var(--text-secondary)' }}>Puan</label>
+                                <div style={{ marginLeft: '1rem', minWidth: '90px', textAlign: 'center' }}>
+                                    <label style={{ fontSize: '0.7rem', display: 'block', color: 'var(--text-secondary)' }}>
+                                        Puan {getPlayerRatingData(player.id).count > 0 ? `(${getPlayerRatingData(player.id).count})` : ''}
+                                    </label>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
                                         <span style={{ fontWeight: 'bold', color: 'var(--accent-primary)' }}>
                                             {getPlayerRatingData(player.id).average}
                                         </span>
                                         <Star size={12} fill="var(--accent-primary)" color="var(--accent-primary)" />
                                         {/* Vote Input */}
-                                        {isPlayerInMatch && player.id !== (currentUser.uid || currentUser.id) && !isEditing && (
+                                        {currentUser && String(player.id) !== currentUserId && !isEditing && (
                                             <select
                                                 value={getMyVote(player.id)}
                                                 onChange={(e) => handleRate(player.id, e.target.value)}
+                                                title="Oyuncuya 1-10 arası puan verin"
                                                 style={{
                                                     marginLeft: '4px',
-                                                    width: '40px',
+                                                    width: '42px',
                                                     padding: '2px',
                                                     fontSize: '0.8rem',
                                                     borderRadius: '4px',
                                                     border: '1px solid var(--border-color)',
                                                     background: 'var(--bg-secondary)',
-                                                    color: 'var(--text-primary)'
+                                                    color: 'var(--text-primary)',
+                                                    cursor: 'pointer'
                                                 }}
                                             >
                                                 <option value="">-</option>

@@ -96,13 +96,10 @@ service cloud.firestore {
                        request.resource.data.groupId != null &&
                        isGroupAdmin(request.resource.data.groupId);
       
-      // Admins can update all match fields. Regular members can ONLY update 'ratings'
+      // Admins can update all match fields. Signed-in members/players can update 'ratings'
       allow update: if isSignedIn() && (
         isGroupAdmin(resource.data.groupId) ||
-        (
-          isGroupMember(resource.data.groupId) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ratings'])
-        )
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ratings'])
       );
       
       allow delete: if isSignedIn() && isGroupAdmin(resource.data.groupId);

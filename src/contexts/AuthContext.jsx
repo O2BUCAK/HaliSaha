@@ -7,10 +7,11 @@ import {
     onAuthStateChanged,
     GoogleAuthProvider,
     signInWithPopup,
-    updateProfile as updateFirebaseProfile
+    updateProfile as updateFirebaseProfile,
+    deleteUser
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
-import { toTitleCase, sanitizeInput } from '../utils';
+import { doc, setDoc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { toTitleCase, sanitizeInput, isValidEmail, sanitizeObject } from '../utils';
 
 const AuthContext = createContext();
 
@@ -56,7 +57,7 @@ export const AuthProvider = ({ children }) => {
             const cleanNickname = sanitizeInput(nickname);
             const cleanEmail = email?.trim().toLowerCase();
 
-            if (!cleanEmail || !cleanEmail.includes('@')) {
+            if (!cleanEmail || !isValidEmail(cleanEmail)) {
                 return { success: false, error: "Geçerli bir e-posta adresi giriniz." };
             }
             if (!password || password.length < 6) {
@@ -197,18 +198,53 @@ export const AuthProvider = ({ children }) => {
             delete safeData.role;
             delete safeData.createdAt;
 
-            const userDocRef = doc(db, 'users', currentUser.uid || currentUser.id);
-            await updateDoc(userDocRef, safeData);
+            const cleanPayload = sanitizeObject(safeData);
 
-            if (safeData.name && auth.currentUser) {
-                await updateFirebaseProfile(auth.currentUser, { displayName: safeData.name });
+            const userDocRef = doc(db, 'users', currentUser.uid || currentUser.id);
+            await updateDoc(userDocRef, cleanPayload);
+
+            if (cleanPayload.name && auth.currentUser) {
+                await updateFirebaseProfile(auth.currentUser, { displayName: cleanPayload.name });
             }
 
-            setCurrentUser(prev => ({ ...prev, ...safeData }));
+            setCurrentUser(prev => ({ ...prev, ...cleanPayload }));
             return { success: true };
         } catch (error) {
             console.error("Update Profile Error:", error);
             return { success: false, error: "Profil güncellenemedi." };
+        }
+    };
+
+    const deleteAccount = async () => {
+        if (!currentUser) return { success: false, error: 'Giriş yapılmamış.' };
+
+        try {
+            const uid = currentUser.uid || currentUser.id;
+            
+            // 1. Delete user profile document from Firestore
+            try {
+                const userDocRef = doc(db, 'users', uid);
+                await deleteDoc(userDocRef);
+            } catch (err) {
+                console.warn("Could not delete firestore user document:", err);
+            }
+
+            // 2. Delete user authentication record
+            if (auth.currentUser) {
+                await deleteUser(auth.currentUser);
+            }
+
+            setCurrentUser(null);
+            return { success: true };
+        } catch (error) {
+            console.error("Delete Account Error:", error);
+            if (error.code === 'auth/requires-recent-login') {
+                return {
+                    success: false,
+                    error: 'Hesabınızı ve verilerinizi silebilmek için güvenlik gereği lütfen çıkış yapıp tekrar giriş yapınız.'
+                };
+            }
+            return { success: false, error: error.message || 'Hesap silinirken bir hata oluştu.' };
         }
     };
 
@@ -224,6 +260,7 @@ export const AuthProvider = ({ children }) => {
         loginWithGoogle,
         logout,
         updateProfile,
+        deleteAccount,
         loading
     };
 

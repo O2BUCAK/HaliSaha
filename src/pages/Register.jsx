@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { User, Mail, Lock, AlertCircle, Chrome } from 'lucide-react';
 import { toTitleCase, useSEO } from '../utils';
+import KvkkModal from '../components/KvkkModal';
 
 const Register = () => {
     useSEO({
@@ -14,6 +15,8 @@ const Register = () => {
     const [nickname, setNickname] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [kvkkAccepted, setKvkkAccepted] = useState(false);
+    const [showKvkkModal, setShowKvkkModal] = useState(false);
     const [honeypot, setHoneypot] = useState(''); // Anti-bot honeypot field
     const [error, setError] = useState('');
     const { register, loginWithGoogle } = useAuth();
@@ -47,6 +50,11 @@ const Register = () => {
         const passwordError = validatePassword(password);
         if (passwordError) {
             setError(passwordError);
+            return;
+        }
+
+        if (!kvkkAccepted) {
+            setError("Kayıt olabilmek için lütfen KVKK Aydınlatma Metni'ni onaylayınız.");
             return;
         }
 
@@ -169,6 +177,35 @@ const Register = () => {
                         </div>
                     </div>
 
+                    <div style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'flex-start', gap: '0.6rem' }}>
+                        <input
+                            type="checkbox"
+                            id="kvkkCheck"
+                            checked={kvkkAccepted}
+                            onChange={(e) => setKvkkAccepted(e.target.checked)}
+                            style={{ marginTop: '0.2rem', accentColor: 'var(--accent-primary)', width: '16px', height: '16px', cursor: 'pointer' }}
+                        />
+                        <label htmlFor="kvkkCheck" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer', lineHeight: '1.4' }}>
+                            <button
+                                type="button"
+                                onClick={() => setShowKvkkModal(true)}
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: 'var(--accent-primary)',
+                                    textDecoration: 'underline',
+                                    padding: 0,
+                                    fontSize: '0.8rem',
+                                    cursor: 'pointer',
+                                    marginRight: '0.25rem'
+                                }}
+                            >
+                                KVKK Aydınlatma Metni'ni
+                            </button>
+                            okudum, kişisel verilerimin mevzuata uygun işlenmesini kabul ediyorum.
+                        </label>
+                    </div>
+
                     <button type="submit" className="btn btn-primary" style={{ width: '100%', marginBottom: '1rem' }}>
                         Kayıt Ol
                     </button>
@@ -192,6 +229,8 @@ const Register = () => {
                     Zaten hesabınız var mı? <Link to="/login" style={{ color: 'var(--accent-primary)' }}>Giriş Yap</Link>
                 </div>
             </div>
+
+            <KvkkModal isOpen={showKvkkModal} onClose={() => setShowKvkkModal(false)} />
         </div>
     );
 };

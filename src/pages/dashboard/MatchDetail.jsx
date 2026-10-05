@@ -111,7 +111,7 @@ const MatchDetail = () => {
             }
         };
         fetchMembers();
-    }, [group?.members]);
+    }, [group, getUsersDetails]);
 
     if (loading) return <div>Yükleniyor...</div>;
     if (!match || !group) return <div>Maç bulunamadı.</div>;

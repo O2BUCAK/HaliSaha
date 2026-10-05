@@ -1,12 +1,17 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
 import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
-import { User, Mail, Edit2, Save, X, Instagram, Twitter, Facebook, Linkedin, Globe, Database } from 'lucide-react';
+import { User, Mail, Edit2, Save, X, Instagram, Twitter, Facebook, Linkedin, Database, ShieldCheck, Trash2 } from 'lucide-react';
 import { toTitleCase, useSEO } from '../utils';
+import KvkkModal from '../components/KvkkModal';
 
 const Profile = () => {
-    const { currentUser, updateProfile } = useAuth();
+    const { currentUser, updateProfile, deleteAccount } = useAuth();
+    const navigate = useNavigate();
+    const [showKvkkModal, setShowKvkkModal] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     
     useSEO({
         title: 'Profilim',
@@ -46,14 +51,31 @@ const Profile = () => {
         }
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        const result = updateProfile(formData);
+        const result = await updateProfile(formData);
         if (result.success) {
             setMessage({ type: 'success', text: 'Profil başarıyla güncellendi!' });
             setIsEditing(false);
             setTimeout(() => setMessage(null), 3000);
         } else {
+            setMessage({ type: 'error', text: result.error });
+        }
+    };
+
+    const handleDeleteAccount = async () => {
+        const confirmed = window.confirm(
+            "6698 Sayılı KVKK Madde 11 (Unutulma Hakkı) kapsamında hesabınızı ve tüm kişisel verilerinizi kalıcı olarak silmek istediğinizden emin misiniz?\n\nBu işlem geri alınamaz!"
+        );
+        if (!confirmed) return;
+
+        setIsDeleting(true);
+        setMessage({ type: 'success', text: 'Hesap ve veriler siliniyor...' });
+        const result = await deleteAccount();
+        if (result.success) {
+            navigate('/');
+        } else {
+            setIsDeleting(false);
             setMessage({ type: 'error', text: result.error });
         }
     };
@@ -384,6 +406,46 @@ const Profile = () => {
                         </div>
                     )}
 
+                    <div style={{
+                        marginTop: '2rem',
+                        borderTop: '1px solid var(--border-color)',
+                        paddingTop: '1.5rem'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                            <ShieldCheck size={20} color="var(--accent-primary)" />
+                            <h4 style={{ fontSize: '1rem', margin: 0 }}>Gizlilik ve KVKK Hakları</h4>
+                        </div>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.5', marginBottom: '1rem' }}>
+                            6698 Sayılı Kişisel Verilerin Korunması Kanunu (KVKK) uyarınca işlenen kişisel verilerinizi inceleyebilir, aydınlatma metnini görüntüleyebilir veya dilediğiniz an tüm verilerinizle birlikte hesabınızı kalıcı olarak silebilirsiniz (Unutulma Hakkı).
+                        </p>
+                        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                            <button
+                                type="button"
+                                onClick={() => setShowKvkkModal(true)}
+                                className="btn btn-secondary"
+                                style={{ fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                            >
+                                <ShieldCheck size={16} /> KVKK Aydınlatma Metni
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleDeleteAccount}
+                                disabled={isDeleting}
+                                className="btn btn-secondary"
+                                style={{
+                                    fontSize: '0.85rem',
+                                    color: 'var(--accent-danger)',
+                                    borderColor: 'rgba(239, 68, 68, 0.4)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.4rem'
+                                }}
+                            >
+                                <Trash2 size={16} /> {isDeleting ? 'Siliniyor...' : 'Hesabımı ve Verilerimi Sil'}
+                            </button>
+                        </div>
+                    </div>
+
                     <div style={{ marginTop: '2rem', borderTop: '1px solid var(--border-color)', paddingTop: '2rem' }}>
                         <button
                             onClick={handleMigration}
@@ -395,6 +457,8 @@ const Profile = () => {
                     </div>
                 </div>
             </div>
+
+            <KvkkModal isOpen={showKvkkModal} onClose={() => setShowKvkkModal(false)} />
         </div>
     );
 };

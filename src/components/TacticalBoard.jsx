@@ -27,7 +27,7 @@ const TacticalBoard = ({ match, group, onSave, readOnly = false }) => {
         }));
 
         setPlayers([...teamAPlayers, ...teamBPlayers]);
-    }, [match]);
+    }, [match, group?.jerseyNumbers]);
 
     const handleDragStart = (e, playerId) => {
         if (readOnly) return;

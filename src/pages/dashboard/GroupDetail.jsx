@@ -69,7 +69,7 @@ const GroupDetail = () => {
         } else {
             setLoading(false);
         }
-    }, [groupId, contextGroup]);
+    }, [groupId, contextGroup, fetchGroup]);
 
     useEffect(() => {
         if (isAdmin) {
@@ -81,7 +81,7 @@ const GroupDetail = () => {
             };
             loadRequests();
         }
-    }, [isAdmin, groupId]);
+    }, [isAdmin, groupId, getJoinRequests]);
 
     useEffect(() => {
         if (group) {
@@ -97,7 +97,7 @@ const GroupDetail = () => {
             };
             loadMembers();
         }
-    }, [group?.members]);
+    }, [group?.members, getUsersDetails]);
 
     useEffect(() => {
         if (group?.activeSeasonId) {

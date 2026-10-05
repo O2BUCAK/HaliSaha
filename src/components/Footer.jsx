@@ -1,8 +1,20 @@
-import React from 'react';
-import { Mail, MessageSquare } from 'lucide-react';
+import React, { useState } from 'react';
+import { Mail, MessageSquare, ShieldCheck, Cookie } from 'lucide-react';
 import packageJson from '../../package.json';
+import KvkkModal from './KvkkModal';
 
 const Footer = () => {
+    const [showKvkk, setShowKvkk] = useState(false);
+
+    const handleOpenCookieSettings = () => {
+        try {
+            localStorage.removeItem('halisaha_cookie_preferences');
+            window.location.reload();
+        } catch {
+            // ignore
+        }
+    };
+
     return (
         <footer style={{
             marginTop: 'auto',
@@ -18,7 +30,7 @@ const Footer = () => {
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 flexWrap: 'wrap',
-                gap: '0.75rem'
+                gap: '1rem'
             }}>
                 <div style={{
                     display: 'flex',
@@ -57,13 +69,58 @@ const Footer = () => {
                 </div>
 
                 <div style={{
-                    color: 'var(--text-secondary)',
-                    fontSize: '0.8rem',
-                    opacity: 0.85
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '1rem',
+                    flexWrap: 'wrap',
+                    fontSize: '0.8rem'
                 }}>
-                    Halı Saha İstatistik v{packageJson.version}
+                    <button
+                        type="button"
+                        onClick={() => setShowKvkk(true)}
+                        style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--text-secondary)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.3rem',
+                            cursor: 'pointer',
+                            padding: 0
+                        }}
+                    >
+                        <ShieldCheck size={14} color="var(--accent-primary)" />
+                        KVKK ve Gizlilik
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={handleOpenCookieSettings}
+                        style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--text-secondary)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.3rem',
+                            cursor: 'pointer',
+                            padding: 0
+                        }}
+                    >
+                        <Cookie size={14} color="var(--accent-primary)" />
+                        Çerez Tercihleri
+                    </button>
+
+                    <div style={{
+                        color: 'var(--text-secondary)',
+                        opacity: 0.85
+                    }}>
+                        Halı Saha İstatistik v{packageJson.version}
+                    </div>
                 </div>
             </div>
+
+            <KvkkModal isOpen={showKvkk} onClose={() => setShowKvkk(false)} />
         </footer>
     );
 };

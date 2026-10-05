@@ -56,6 +56,30 @@ export const validateImageUpload = (file, maxSizeBytes = 2 * 1024 * 1024) => {
     return { valid: true };
 };
 
+/**
+ * Validates email format according to RFC 5322 simplified standard.
+ */
+export const isValidEmail = (email) => {
+    if (!email || typeof email !== 'string') return false;
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    return emailRegex.test(email.trim()) && email.length <= 120;
+};
+
+/**
+ * Strips dangerous prototype keys to prevent Prototype Pollution attacks.
+ */
+export const sanitizeObject = (obj) => {
+    if (!obj || typeof obj !== 'object') return obj;
+    const clean = Array.isArray(obj) ? [] : {};
+    for (const key of Object.keys(obj)) {
+        if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+            continue;
+        }
+        clean[key] = typeof obj[key] === 'object' && obj[key] !== null ? sanitizeObject(obj[key]) : obj[key];
+    }
+    return clean;
+};
+
 export const useSEO = ({ title, description }) => {
     useEffect(() => {
         const safeTitle = sanitizeInput(title, 100);

@@ -102,7 +102,10 @@ service cloud.firestore {
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ratings'])
       );
       
-      allow delete: if isSignedIn() && isGroupAdmin(resource.data.groupId);
+      allow delete: if isSignedIn() && (
+        isGroupAdmin(resource.data.groupId) ||
+        (resource.data.keys().hasAll(['createdBy']) && request.auth.uid == resource.data.createdBy)
+      );
     }
     
     // Invitations collection

@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { toTitleCase } from '../../utils';
 import InviteMember from '../../components/InviteMember';
 import AdSenseBanner from '../../components/AdSenseBanner';
+import ConfirmModal from '../../components/ConfirmModal';
 import { Users, Calendar, Plus, Copy, Check, UserPlus, Trophy, Play, Square, Mail, Trash2, Shield, ShieldAlert, Video, FileText, Save, Hash, Share2, Star, Link2, X, Eraser } from 'lucide-react';
 
 
@@ -15,7 +16,8 @@ const GroupDetail = () => {
         getSeasonStats, getAllTimeStats, assignMatchToSeason, removeMember,
         removeGuestMember, addAdmin, removeAdmin, getUsersDetails,
         fetchGroup, sendJoinRequest, getJoinRequests, respondToJoinRequest,
-        updateGroupJerseyNumbers, mergeGuestToUser, cleanupGuestDuplicates
+        updateGroupJerseyNumbers, mergeGuestToUser, cleanupGuestDuplicates,
+        deleteMatch
     } = useData();
     const { currentUser } = useAuth();
     const [fetchedGroup, setFetchedGroup] = useState(null);
@@ -51,8 +53,23 @@ const GroupDetail = () => {
     const group = contextGroup || fetchedGroup;
 
     // Determine if user is a member
-    const isMember = group?.members?.includes(currentUser?.uid || currentUser?.id);
-    const isAdmin = group && (group.admins || [group.createdBy]).includes(currentUser?.uid || currentUser?.id);
+    const currentUserId = currentUser ? String(currentUser.uid || currentUser.id) : null;
+    const isMember = Boolean(currentUserId && group?.members && group.members.map(String).includes(currentUserId));
+    const isAdmin = Boolean(
+        currentUser && group && (
+            String(group.createdBy) === currentUserId ||
+            (Array.isArray(group.admins) && group.admins.map(String).includes(currentUserId))
+        )
+    );
+
+    const [deleteModal, setDeleteModal] = useState({
+        isOpen: false,
+        matchId: null,
+        isPlayed: false,
+        isLoading: false,
+        error: null
+    });
+    const [actionSuccessMsg, setActionSuccessMsg] = useState('');
 
     const [loading, setLoading] = useState(!contextGroup); // Initial loading if not in context
 
@@ -245,6 +262,33 @@ const GroupDetail = () => {
         if (!isAdmin) return;
         if (window.confirm('Bu misafir oyuncuyu silmek istediğinize emin misiniz?')) {
             await removeGuestMember(groupId, guestId);
+        }
+    };
+
+    const handleDeleteMatch = (matchId, isPlayed = false) => {
+        setDeleteModal({
+            isOpen: true,
+            matchId,
+            isPlayed,
+            isLoading: false,
+            error: null
+        });
+    };
+
+    const handleConfirmDeleteMatch = async () => {
+        if (!deleteModal.matchId) return;
+        setDeleteModal(prev => ({ ...prev, isLoading: true, error: null }));
+        const result = await deleteMatch(deleteModal.matchId);
+        if (result.success) {
+            setDeleteModal({ isOpen: false, matchId: null, isPlayed: false, isLoading: false, error: null });
+            setActionSuccessMsg('Maç başarıyla silindi.');
+            setTimeout(() => setActionSuccessMsg(''), 4000);
+        } else {
+            setDeleteModal(prev => ({
+                ...prev,
+                isLoading: false,
+                error: result.error || 'Maç silinirken hata oluştu.'
+            }));
         }
     };
 
@@ -608,6 +652,22 @@ const GroupDetail = () => {
             <div className="responsive-grid-2-1">
                 {/* Matches Section */}
                 <div>
+                    {actionSuccessMsg && (
+                        <div style={{
+                            padding: '0.75rem 1rem',
+                            marginBottom: '1rem',
+                            borderRadius: '8px',
+                            backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                            border: '1px solid rgba(16, 185, 129, 0.3)',
+                            color: '#10b981',
+                            fontWeight: 500,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem'
+                        }}>
+                            <Check size={18} /> {actionSuccessMsg}
+                        </div>
+                    )}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                         <h3 style={{ fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
                             <Calendar size={20} /> Maçlar
@@ -661,7 +721,11 @@ const GroupDetail = () => {
 
                                     {match.status === 'played' ? (
                                         <div style={{ fontSize: '1.5rem', fontWeight: 'bold', padding: '0.5rem 1rem', background: 'rgba(255,255,255,0.05)', borderRadius: 'var(--radius-md)' }}>
-                                            {match.score.a} - {match.score.b}
+                                            {(isNaN(match.score?.a) || isNaN(match.score?.b) || match.score?.a === undefined || match.score?.b === undefined) ? (
+                                                <span style={{ fontSize: '0.875rem', color: '#f59e0b', fontWeight: '500' }}>Skor Belirtilmedi</span>
+                                            ) : (
+                                                `${match.score.a} - ${match.score.b}`
+                                            )}
                                         </div>
                                     ) : (
                                         <div style={{ padding: '0.25rem 0.75rem', background: 'rgba(255, 165, 0, 0.1)', color: 'orange', borderRadius: '1rem', fontSize: '0.875rem' }}>
@@ -669,9 +733,32 @@ const GroupDetail = () => {
                                         </div>
                                     )}
 
-                                    <Link to={`/dashboard/matches/${match.id}`} className="btn btn-secondary" style={{ padding: '0.5rem' }}>
-                                        Detay
-                                    </Link>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <Link to={`/dashboard/matches/${match.id}`} className="btn btn-secondary" style={{ padding: '0.5rem' }}>
+                                            Detay
+                                        </Link>
+                                        {isAdmin && (
+                                            <button
+                                                onClick={() => handleDeleteMatch(match.id, match.status === 'played')}
+                                                className="btn"
+                                                style={{
+                                                    padding: '0.5rem 0.6rem',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.25rem',
+                                                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                                    color: '#ef4444',
+                                                    border: '1px solid rgba(239, 68, 68, 0.25)',
+                                                    cursor: 'pointer',
+                                                    borderRadius: 'var(--radius-md)',
+                                                    fontSize: '0.85rem'
+                                                }}
+                                                title="Maçı Sil"
+                                            >
+                                                <Trash2 size={15} /> Sil
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                             ))
                         ) : (
@@ -915,6 +1002,26 @@ const GroupDetail = () => {
                     </div>
                 </div>
             )}
+
+            {/* Match Delete Confirmation Modal */}
+            <ConfirmModal
+                isOpen={deleteModal.isOpen}
+                title={deleteModal.isPlayed ? "Maçı Sil" : "Planlanan Maçı Sil"}
+                message={deleteModal.isPlayed
+                    ? "Bu maçı silmek istediğinize emin misiniz? Maç ve varsa ilişkili tüm istatistikler kalıcı olarak kaldırılacaktır."
+                    : "Bu planlanan maçı silmek istediğinize emin misiniz? Bu işlem geri alınamaz."}
+                confirmText="Evet, Maçı Sil"
+                cancelText="Vazgeç"
+                isDanger={true}
+                isLoading={deleteModal.isLoading}
+                error={deleteModal.error}
+                onConfirm={handleConfirmDeleteMatch}
+                onClose={() => {
+                    if (!deleteModal.isLoading) {
+                        setDeleteModal({ isOpen: false, matchId: null, isPlayed: false, isLoading: false, error: null });
+                    }
+                }}
+            />
 
             <AdSenseBanner />
         </div>

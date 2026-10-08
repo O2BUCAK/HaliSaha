@@ -13,6 +13,7 @@ import {
     arrayRemove,
     getDocs,
     getDoc,
+    deleteDoc,
     deleteField,
     serverTimestamp
 } from 'firebase/firestore';
@@ -892,6 +893,102 @@ export const DataProvider = ({ children }) => {
         }
     };
 
+    const deleteMatch = async (matchId) => {
+        try {
+            if (!currentUser) return { success: false, error: 'Giriş yapılmalıdır.' };
+            const matchRef = doc(db, 'matches', matchId);
+            const matchSnap = await getDoc(matchRef);
+            if (!matchSnap.exists()) {
+                // Already removed from DB, clean up local state
+                setMatches(prevMatches => prevMatches.filter(m => m.id !== matchId));
+                return { success: true };
+            }
+            const matchData = matchSnap.data();
+            
+            // Check authorization: user must be admin or creator of the group, or creator of the match
+            const currentUserId = String(currentUser.uid || currentUser.id);
+            let group = groups.find(g => String(g.id) === String(matchData.groupId));
+            if (!group && matchData.groupId) {
+                try {
+                    const groupSnap = await getDoc(doc(db, 'groups', matchData.groupId));
+                    if (groupSnap.exists()) {
+                        group = { id: groupSnap.id, ...groupSnap.data() };
+                    }
+                } catch (gErr) {
+                    console.warn("Could not fetch group doc:", gErr);
+                }
+            }
+
+            const isGroupAdmin = group && (
+                String(group.createdBy) === currentUserId ||
+                (Array.isArray(group.admins) && group.admins.map(String).includes(currentUserId))
+            );
+            const isMatchCreator = matchData && String(matchData.createdBy) === currentUserId;
+
+            if (!isGroupAdmin && !isMatchCreator) {
+                return { success: false, error: 'Bu maçı silme yetkiniz yok.' };
+            }
+
+            await deleteDoc(matchRef);
+            setMatches(prevMatches => prevMatches.filter(m => m.id !== matchId));
+            return { success: true };
+        } catch (error) {
+            console.error("Error deleting match:", error);
+            return { success: false, error: error.message || 'Maç silinirken hata oluştu.' };
+        }
+    };
+
+    const revertMatchToScheduled = async (matchId) => {
+        try {
+            if (!currentUser) return { success: false, error: 'Giriş yapılmalıdır.' };
+            const matchRef = doc(db, 'matches', matchId);
+            const matchSnap = await getDoc(matchRef);
+            if (!matchSnap.exists()) {
+                return { success: false, error: 'Maç bulunamadı.' };
+            }
+            const matchData = matchSnap.data();
+
+            const currentUserId = String(currentUser.uid || currentUser.id);
+            let group = groups.find(g => String(g.id) === String(matchData.groupId));
+            if (!group && matchData.groupId) {
+                try {
+                    const groupSnap = await getDoc(doc(db, 'groups', matchData.groupId));
+                    if (groupSnap.exists()) {
+                        group = { id: groupSnap.id, ...groupSnap.data() };
+                    }
+                } catch (gErr) {
+                    console.warn("Could not fetch group doc:", gErr);
+                }
+            }
+
+            const isGroupAdmin = group && (
+                String(group.createdBy) === currentUserId ||
+                (Array.isArray(group.admins) && group.admins.map(String).includes(currentUserId))
+            );
+            const isMatchCreator = matchData && String(matchData.createdBy) === currentUserId;
+
+            if (!isGroupAdmin && !isMatchCreator) {
+                return { success: false, error: 'Bu işlem için grup yöneticisi olmalısınız.' };
+            }
+
+            await updateDoc(matchRef, {
+                status: 'scheduled',
+                score: null,
+                stats: {}
+            });
+            setMatches(prevMatches => prevMatches.map(m => {
+                if (m.id === matchId) {
+                    return { ...m, status: 'scheduled', score: null, stats: {} };
+                }
+                return m;
+            }));
+            return { success: true };
+        } catch (error) {
+            console.error("Error reverting match to scheduled:", error);
+            return { success: false, error: error.message || 'Maç durumu güncellenemedi.' };
+        }
+    };
+
     const updateMatchTeams = async (matchId, teamA, teamB) => {
         try {
             const matchRef = doc(db, 'matches', matchId);
@@ -1084,6 +1181,8 @@ export const DataProvider = ({ children }) => {
         rejectInvitation,
         createMatch,
         finishMatch,
+        deleteMatch,
+        revertMatchToScheduled,
         assignMatchToSeason,
         startSeason,
         endSeason,

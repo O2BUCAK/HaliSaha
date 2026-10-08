@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useData } from '../../contexts/DataContext';
@@ -7,10 +7,12 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Trophy, Save, Users, UserPlus, Video, FileText, ExternalLink, Hand, Share2, Star, Trash2, Plus, ArrowLeft } from 'lucide-react';
 
 import TacticalBoard from '../../components/TacticalBoard';
+import ConfirmModal from '../../components/ConfirmModal';
 
 const MatchDetail = () => {
     const { matchId } = useParams();
-    const { matches, groups, finishMatch, getUsersDetails, updateMatchTeams, fetchMatch, fetchGroup, givePlayerRating } = useData();
+    const navigate = useNavigate();
+    const { matches, groups, finishMatch, deleteMatch, revertMatchToScheduled, getUsersDetails, updateMatchTeams, fetchMatch, fetchGroup, givePlayerRating } = useData();
     const { currentUser } = useAuth();
     const contextMatch = matches.find(m => m.id === matchId);
     const contextGroup = contextMatch ? groups.find(g => g.id === contextMatch.groupId) : null;
@@ -82,6 +84,17 @@ const MatchDetail = () => {
     const [memberDetails, setMemberDetails] = useState([]);
     const [localRatings, setLocalRatings] = useState({});
 
+    const [confirmModal, setConfirmModal] = useState({
+        isOpen: false,
+        type: null,
+        title: '',
+        message: '',
+        confirmText: '',
+        isDanger: true,
+        isLoading: false,
+        error: null
+    });
+
     useEffect(() => {
         if (match?.ratings) {
             setLocalRatings(match.ratings);
@@ -118,7 +131,12 @@ const MatchDetail = () => {
 
     // Combine all available players and sort alphabetically
     const currentUserId = currentUser ? String(currentUser.uid || currentUser.id) : null;
-    const isAdmin = currentUser && (group.admins || [group.createdBy]).includes(currentUserId);
+    const isAdmin = Boolean(
+        currentUser && group && (
+            String(group.createdBy) === currentUserId ||
+            (Array.isArray(group.admins) && group.admins.map(String).includes(currentUserId))
+        )
+    );
 
     // Check if current user is already in the details list
     const isCurrentUserInDetails = currentUserId && memberDetails.some(m => String(m.id) === currentUserId);
@@ -183,7 +201,11 @@ const MatchDetail = () => {
     };
 
     const handleSave = () => {
-        finishMatch(matchId, parseInt(scoreA), parseInt(scoreB), playerStats, teamA, teamB, teamAName, teamBName, videoUrls.filter(url => url.trim() !== ''), matchSummary);
+        const parsedA = parseInt(scoreA, 10);
+        const parsedB = parseInt(scoreB, 10);
+        const finalScoreA = isNaN(parsedA) ? 0 : parsedA;
+        const finalScoreB = isNaN(parsedB) ? 0 : parsedB;
+        finishMatch(matchId, finalScoreA, finalScoreB, playerStats, teamA, teamB, teamAName, teamBName, videoUrls.filter(url => url.trim() !== ''), matchSummary);
         setIsEditing(false);
     };
 
@@ -241,12 +263,93 @@ const MatchDetail = () => {
         }
     };
 
+    const handleDeleteMatch = () => {
+        const isPlayedOrHasScore = match.status === 'played' || (match.score && (match.score.a !== null || match.score.b !== null));
+        setConfirmModal({
+            isOpen: true,
+            type: 'delete',
+            title: isPlayedOrHasScore ? 'Maçı Sil' : 'Planlanan Maçı Sil',
+            message: isPlayedOrHasScore
+                ? 'Bu maçı silmek istediğinize emin misiniz? Maç ve varsa ilişkili istatistikler kalıcı olarak silinecektir.'
+                : 'Bu planlanan maçı silmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
+            confirmText: 'Evet, Maçı Sil',
+            isDanger: true,
+            isLoading: false,
+            error: null
+        });
+    };
+
+    const handleRevertToScheduled = () => {
+        setConfirmModal({
+            isOpen: true,
+            type: 'revert',
+            title: 'Planlanan Duruma Geri Al (Oynanmadı)',
+            message: 'Bu maçı "Planlandı (Oynanmadı)" durumuna geri almak istediğinize emin misiniz? Girilen skor ve oyuncu istatistikleri sıfırlanacaktır.',
+            confirmText: 'Evet, Geri Al',
+            isDanger: false,
+            isLoading: false,
+            error: null
+        });
+    };
+
+    const handleModalConfirm = async () => {
+        if (confirmModal.type === 'delete') {
+            setConfirmModal(prev => ({ ...prev, isLoading: true, error: null }));
+            const result = await deleteMatch(matchId);
+            if (result.success) {
+                navigate(`/dashboard/groups/${group?.id || match?.groupId || ''}`);
+            } else {
+                setConfirmModal(prev => ({
+                    ...prev,
+                    isLoading: false,
+                    error: result.error || 'Maç silinirken hata oluştu.'
+                }));
+            }
+        } else if (confirmModal.type === 'revert') {
+            setConfirmModal(prev => ({ ...prev, isLoading: true, error: null }));
+            const result = await revertMatchToScheduled(matchId);
+            if (result.success) {
+                setIsEditing(false);
+                setScoreA(0);
+                setScoreB(0);
+                setPlayerStats({});
+                setConfirmModal({ isOpen: false, type: null, isLoading: false, error: null });
+            } else {
+                setConfirmModal(prev => ({
+                    ...prev,
+                    isLoading: false,
+                    error: result.error || 'Maç durumu geri alınırken hata oluştu.'
+                }));
+            }
+        }
+    };
+
     return (
         <div className="container" style={{ maxWidth: '1000px' }}>
-            <div style={{ marginBottom: '1rem' }}>
-                <Link to={`/dashboard/groups/${group?.id}`} className="btn btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem' }}>
+            <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Link to={`/dashboard/groups/${group?.id || match?.groupId || ''}`} className="btn btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem' }}>
                     <ArrowLeft size={16} /> Gruba Dön
                 </Link>
+                {isAdmin && (
+                    <button
+                        onClick={handleDeleteMatch}
+                        className="btn"
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            padding: '0.5rem 1rem',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            color: '#ef4444',
+                            border: '1px solid rgba(239, 68, 68, 0.25)',
+                            borderRadius: 'var(--radius-md)',
+                            cursor: 'pointer'
+                        }}
+                        title="Maçı Sil"
+                    >
+                        <Trash2 size={16} /> Maçı Sil
+                    </button>
+                )}
             </div>
             {/* Scoreboard */}
             <div className="card" style={{ marginBottom: '2rem', textAlign: 'center', padding: '2rem 1rem' }}>
@@ -333,12 +436,12 @@ const MatchDetail = () => {
                         {isEditing ? (
                             <input
                                 type="number"
-                                value={scoreA}
-                                onChange={(e) => setScoreA(e.target.value)}
+                                value={scoreA === '' || isNaN(scoreA) ? '' : scoreA}
+                                onChange={(e) => setScoreA(e.target.value === '' ? '' : parseInt(e.target.value, 10))}
                                 style={{ width: '80px', fontSize: '2rem', textAlign: 'center', padding: '0.5rem' }}
                             />
                         ) : (
-                            <div style={{ fontSize: '3rem', fontWeight: 'bold' }}>{scoreA}</div>
+                            <div style={{ fontSize: '3rem', fontWeight: 'bold' }}>{isNaN(scoreA) || scoreA === null || scoreA === undefined ? '-' : scoreA}</div>
                         )}
                     </div>
 
@@ -358,12 +461,12 @@ const MatchDetail = () => {
                         {isEditing ? (
                             <input
                                 type="number"
-                                value={scoreB}
-                                onChange={(e) => setScoreB(e.target.value)}
+                                value={scoreB === '' || isNaN(scoreB) ? '' : scoreB}
+                                onChange={(e) => setScoreB(e.target.value === '' ? '' : parseInt(e.target.value, 10))}
                                 style={{ width: '80px', fontSize: '2rem', textAlign: 'center', padding: '0.5rem' }}
                             />
                         ) : (
-                            <div style={{ fontSize: '3rem', fontWeight: 'bold' }}>{scoreB}</div>
+                            <div style={{ fontSize: '3rem', fontWeight: 'bold' }}>{isNaN(scoreB) || scoreB === null || scoreB === undefined ? '-' : scoreB}</div>
                         )}
                     </div>
                 </div>
@@ -675,20 +778,100 @@ const MatchDetail = () => {
             </div>
 
             {isEditing ? (
-                <div style={{ marginTop: '2rem', textAlign: 'center' }}>
-                    <button onClick={handleSave} className="btn btn-primary" style={{ padding: '1rem 3rem', fontSize: '1.1rem' }}>
-                        <Save size={20} /> Maçı Bitir ve Kaydet
+                <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                    {match.status === 'played' && (
+                        <button onClick={() => setIsEditing(false)} className="btn btn-secondary" style={{ padding: '0.75rem 2rem', fontSize: '1rem' }}>
+                            Vazgeç
+                        </button>
+                    )}
+                    <button onClick={handleSave} className="btn btn-primary" style={{ padding: '0.75rem 2.5rem', fontSize: '1rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Save size={18} /> Maçı Bitir ve Kaydet
                     </button>
+                    {isAdmin && (
+                        <button
+                            onClick={handleDeleteMatch}
+                            className="btn"
+                            style={{
+                                padding: '0.75rem 2rem',
+                                fontSize: '1rem',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                color: '#ef4444',
+                                border: '1px solid rgba(239, 68, 68, 0.25)',
+                                borderRadius: 'var(--radius-md)',
+                                cursor: 'pointer'
+                            }}
+                            title="Maçı Sil"
+                        >
+                            <Trash2 size={18} /> Maçı Sil
+                        </button>
+                    )}
                 </div>
             ) : (
                 isAdmin && (
-                    <div style={{ marginTop: '2rem', textAlign: 'center' }}>
-                        <button onClick={() => setIsEditing(true)} className="btn btn-secondary" style={{ padding: '1rem 3rem', fontSize: '1.1rem' }}>
+                    <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                        <button onClick={() => setIsEditing(true)} className="btn btn-secondary" style={{ padding: '0.75rem 2.5rem', fontSize: '1rem' }}>
                             Düzenle / İstatistik Gir
+                        </button>
+                        {match.status === 'played' && (
+                            <button
+                                onClick={handleRevertToScheduled}
+                                className="btn btn-secondary"
+                                style={{
+                                    padding: '0.75rem 1.5rem',
+                                    fontSize: '1rem',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    borderColor: 'rgba(245, 158, 11, 0.4)',
+                                    color: '#f59e0b'
+                                }}
+                                title="Maçı oynanmadı durumuna geri al"
+                            >
+                                Planlanan Duruma Geri Al (Oynanmadı)
+                            </button>
+                        )}
+                        <button
+                            onClick={handleDeleteMatch}
+                            className="btn"
+                            style={{
+                                padding: '0.75rem 2rem',
+                                fontSize: '1rem',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                color: '#ef4444',
+                                border: '1px solid rgba(239, 68, 68, 0.25)',
+                                borderRadius: 'var(--radius-md)',
+                                cursor: 'pointer'
+                            }}
+                            title="Maçı Sil"
+                        >
+                            <Trash2 size={18} /> Maçı Sil
                         </button>
                     </div>
                 )
             )}
+
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                confirmText={confirmModal.confirmText}
+                cancelText="Vazgeç"
+                isDanger={confirmModal.isDanger}
+                isLoading={confirmModal.isLoading}
+                error={confirmModal.error}
+                onConfirm={handleModalConfirm}
+                onClose={() => {
+                    if (!confirmModal.isLoading) {
+                        setConfirmModal({ isOpen: false, type: null, isLoading: false, error: null });
+                    }
+                }}
+            />
         </div>
     );
 };

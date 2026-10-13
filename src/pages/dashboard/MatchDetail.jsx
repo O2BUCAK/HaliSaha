@@ -8,12 +8,14 @@ import { Trophy, Save, Users, UserPlus, Video, FileText, ExternalLink, Hand, Sha
 
 import TacticalBoard from '../../components/TacticalBoard';
 import ConfirmModal from '../../components/ConfirmModal';
+import VenueLocationPicker from '../../components/VenueLocationPicker';
+import FeeCollectionTracker from '../../components/FeeCollectionTracker';
 import { toTitleCase, stripSenSuffix, formatPlayerDisplayName } from '../../utils';
 
 const MatchDetail = () => {
     const { matchId } = useParams();
     const navigate = useNavigate();
-    const { matches, groups, finishMatch, deleteMatch, revertMatchToScheduled, getUsersDetails, updateMatchTeams, fetchMatch, fetchGroup, givePlayerRating } = useData();
+    const { matches, groups, finishMatch, deleteMatch, revertMatchToScheduled, getUsersDetails, updateMatchTeams, updateMatchVenue, fetchMatch, fetchGroup, givePlayerRating } = useData();
     const { currentUser } = useAuth();
     const contextMatch = matches.find(m => m.id === matchId);
     const contextGroup = contextMatch ? groups.find(g => g.id === contextMatch.groupId) : null;
@@ -76,6 +78,12 @@ const MatchDetail = () => {
     const [teamAColor, setTeamAColor] = useState(match?.teamAColor || '#2563eb');
     const [teamBColor, setTeamBColor] = useState(match?.teamBColor || '#dc2626');
 
+    // Venue & Location State
+    const [venue, setVenue] = useState(match?.venue || '');
+    const [venueAddress, setVenueAddress] = useState(match?.venueAddress || '');
+    const [venueMapsUrl, setVenueMapsUrl] = useState(match?.venueMapsUrl || '');
+    const [venueCoordinates, setVenueCoordinates] = useState(match?.venueCoordinates || null);
+
     // Media & Content State
     const [videoUrls, setVideoUrls] = useState(match?.videoUrls || (match?.videoUrl ? [match.videoUrl] : []));
     const [matchSummary, setMatchSummary] = useState(match?.matchSummary || '');
@@ -117,6 +125,10 @@ const MatchDetail = () => {
             setTeamBName(match.teamBName || 'Takım B');
             setTeamAColor(match.teamAColor || '#2563eb');
             setTeamBColor(match.teamBColor || '#dc2626');
+            setVenue(match.venue || '');
+            setVenueAddress(match.venueAddress || '');
+            setVenueMapsUrl(match.venueMapsUrl || '');
+            setVenueCoordinates(match.venueCoordinates || null);
             setVideoUrls(match.videoUrls || (match.videoUrl ? [match.videoUrl] : []));
             setMatchSummary(match.matchSummary || '');
             setPlayerStats(match.stats || {});
@@ -216,7 +228,21 @@ const MatchDetail = () => {
         const parsedB = parseInt(scoreB, 10);
         const finalScoreA = isNaN(parsedA) ? 0 : parsedA;
         const finalScoreB = isNaN(parsedB) ? 0 : parsedB;
-        finishMatch(matchId, finalScoreA, finalScoreB, playerStats, teamA, teamB, teamAName, teamBName, videoUrls.filter(url => url.trim() !== ''), matchSummary, teamAColor, teamBColor);
+        finishMatch(
+            matchId,
+            finalScoreA,
+            finalScoreB,
+            playerStats,
+            teamA,
+            teamB,
+            teamAName,
+            teamBName,
+            videoUrls.filter(url => url.trim() !== ''),
+            matchSummary,
+            teamAColor,
+            teamBColor,
+            { venue, venueAddress, venueMapsUrl, venueCoordinates }
+        );
         setIsEditing(false);
     };
 
@@ -241,6 +267,23 @@ const MatchDetail = () => {
             setTimeout(() => setToast(null), 3000);
         } else {
             setToast({ type: 'error', message: 'Kaydedilirken hata oluştu.' });
+            setTimeout(() => setToast(null), 4000);
+        }
+    };
+
+    const handleSaveVenueOnly = async () => {
+        try {
+            await updateMatchVenue(matchId, {
+                venue,
+                venueAddress,
+                venueMapsUrl,
+                venueCoordinates
+            });
+            setToast({ type: 'success', message: 'Halısaha tesis ve konum bilgileri güncellendi!' });
+            setTimeout(() => setToast(null), 3000);
+        } catch (err) {
+            console.error('Error saving venue:', err);
+            setToast({ type: 'error', message: 'Konum kaydedilirken hata oluştu.' });
             setTimeout(() => setToast(null), 4000);
         }
     };
@@ -555,6 +598,30 @@ const MatchDetail = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Halısaha Konumu ve Tesis Bilgileri */}
+            <VenueLocationPicker
+                venue={venue}
+                onVenueChange={setVenue}
+                address={venueAddress}
+                onAddressChange={setVenueAddress}
+                mapsUrl={venueMapsUrl}
+                onMapsUrlChange={setVenueMapsUrl}
+                coordinates={venueCoordinates}
+                onCoordinatesChange={setVenueCoordinates}
+                isEditing={isEditing}
+                canEdit={isAdmin}
+                onSaveVenue={isAdmin ? handleSaveVenueOnly : undefined}
+            />
+
+            {/* Halısaha Ücret Toplama ve Kasa Takibi (Sadece Grup Yöneticisi Görür) */}
+            {isAdmin && (
+                <FeeCollectionTracker
+                    match={match}
+                    group={group}
+                    isAdmin={isAdmin}
+                />
+            )}
 
             {/* Match Summary Section */}
             {(matchSummary || isEditing) && (

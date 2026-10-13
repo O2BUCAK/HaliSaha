@@ -861,7 +861,7 @@ export const DataProvider = ({ children }) => {
         }
     };
 
-    const createMatch = async (groupId, date, venue, teamA, teamB, teamAName = 'Takım A', teamBName = 'Takım B', teamAColor = '#2563eb', teamBColor = '#dc2626') => {
+    const createMatch = async (groupId, date, venue, teamA, teamB, teamAName = 'Takım A', teamBName = 'Takım B', teamAColor = '#2563eb', teamBColor = '#dc2626', venueDetails = {}) => {
         const group = groups.find(g => g.id === groupId);
         const seasonId = group?.activeSeasonId || null;
 
@@ -878,7 +878,10 @@ export const DataProvider = ({ children }) => {
             groupId,
             seasonId,
             date,
-            venue,
+            venue: venue || 'Halı Saha',
+            venueAddress: venueDetails?.venueAddress || '',
+            venueMapsUrl: venueDetails?.venueMapsUrl || '',
+            venueCoordinates: venueDetails?.venueCoordinates || null,
             teamA: cleanTeamA,
             teamB: cleanTeamB,
             teamAName,
@@ -902,7 +905,7 @@ export const DataProvider = ({ children }) => {
         }
     };
 
-    const finishMatch = async (matchId, scoreA, scoreB, playerStats, teamA, teamB, teamAName, teamBName, videoUrls = [], matchSummary = '', teamAColor = '#2563eb', teamBColor = '#dc2626') => {
+    const finishMatch = async (matchId, scoreA, scoreB, playerStats, teamA, teamB, teamAName, teamBName, videoUrls = [], matchSummary = '', teamAColor = '#2563eb', teamBColor = '#dc2626', venueData = {}) => {
         try {
             const cleanTeamA = (teamA || []).map(p => ({
                 ...p,
@@ -928,11 +931,70 @@ export const DataProvider = ({ children }) => {
                 matchSummary
             };
 
+            if (venueData?.venue) updatePayload.venue = venueData.venue;
+            if (venueData?.venueAddress !== undefined) updatePayload.venueAddress = venueData.venueAddress;
+            if (venueData?.venueMapsUrl !== undefined) updatePayload.venueMapsUrl = venueData.venueMapsUrl;
+            if (venueData?.venueCoordinates !== undefined) updatePayload.venueCoordinates = venueData.venueCoordinates;
+
             await updateDoc(matchRef, updatePayload);
 
             setMatches(prev => prev.map(m => m.id === matchId ? { ...m, ...updatePayload } : m));
         } catch (error) {
             console.error("Error finishing match:", error);
+        }
+    };
+
+    const updateMatchVenue = async (matchId, venueData = {}) => {
+        try {
+            const matchRef = doc(db, 'matches', matchId);
+            const updatePayload = {};
+            if (venueData.venue !== undefined) updatePayload.venue = venueData.venue;
+            if (venueData.venueAddress !== undefined) updatePayload.venueAddress = venueData.venueAddress;
+            if (venueData.venueMapsUrl !== undefined) updatePayload.venueMapsUrl = venueData.venueMapsUrl;
+            if (venueData.venueCoordinates !== undefined) updatePayload.venueCoordinates = venueData.venueCoordinates;
+
+            await updateDoc(matchRef, updatePayload);
+            setMatches(prev => prev.map(m => m.id === matchId ? { ...m, ...updatePayload } : m));
+            return { success: true };
+        } catch (error) {
+            console.error("Error updating match venue:", error);
+            return { success: false, error: 'Mekan ve konum güncellenemedi.' };
+        }
+    };
+
+    const updateMatchPaymentTracking = async (matchId, paymentTrackingData) => {
+        try {
+            const matchRef = doc(db, 'matches', matchId);
+            const updatePayload = {
+                paymentTracking: {
+                    ...paymentTrackingData,
+                    updatedAt: new Date().toISOString()
+                }
+            };
+            await updateDoc(matchRef, updatePayload);
+            setMatches(prev => prev.map(m => m.id === matchId ? { ...m, ...updatePayload } : m));
+            return { success: true };
+        } catch (error) {
+            console.error("Error updating match payment tracking:", error);
+            return { success: false, error: 'Ücret takip bilgileri güncellenemedi.' };
+        }
+    };
+
+    const updateGroupFeeSettings = async (groupId, feeSettings) => {
+        try {
+            const groupRef = doc(db, 'groups', groupId);
+            const updatePayload = {
+                feeSettings: {
+                    ...feeSettings,
+                    updatedAt: new Date().toISOString()
+                }
+            };
+            await updateDoc(groupRef, updatePayload);
+            setGroups(prev => prev.map(g => g.id === groupId ? { ...g, ...updatePayload } : g));
+            return { success: true };
+        } catch (error) {
+            console.error("Error updating group fee settings:", error);
+            return { success: false, error: 'Grup ücret ayarları kaydedilemedi.' };
         }
     };
 
@@ -1367,6 +1429,9 @@ export const DataProvider = ({ children }) => {
         getJoinRequests,
         respondToJoinRequest,
         updateMatchTeams,
+        updateMatchVenue,
+        updateMatchPaymentTracking,
+        updateGroupFeeSettings,
         updateGroupJerseyNumbers,
         cleanupGuestDuplicates
     };

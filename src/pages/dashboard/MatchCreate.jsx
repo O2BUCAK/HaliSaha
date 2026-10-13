@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
-import { MapPin, Clock, Palette, Shield } from 'lucide-react';
+import { Clock, Palette, Shield } from 'lucide-react';
 import { PRESET_TEAM_COMBOS } from '../../components/TacticalBoard';
+import VenueLocationPicker from '../../components/VenueLocationPicker';
 
 const MatchCreate = () => {
     const { groupId } = useParams();
@@ -16,7 +17,12 @@ const MatchCreate = () => {
     const [hour, setHour] = useState('');
     const [minute, setMinute] = useState('00');
 
+    // Venue & Location State
     const [venue, setVenue] = useState('');
+    const [venueAddress, setVenueAddress] = useState('');
+    const [venueMapsUrl, setVenueMapsUrl] = useState('');
+    const [venueCoordinates, setVenueCoordinates] = useState(null);
+
     const [teamAName, setTeamAName] = useState('Takım A');
     const [teamBName, setTeamBName] = useState('Takım B');
     const [teamAColor, setTeamAColor] = useState('#2563eb');
@@ -31,7 +37,18 @@ const MatchCreate = () => {
         const formattedDay = day.toString().padStart(2, '0');
         const fullDate = `${year}-${formattedMonth}-${formattedDay}T${hour}:${minute}`;
 
-        createMatch(groupId, fullDate, venue, [], [], teamAName || 'Takım A', teamBName || 'Takım B', teamAColor, teamBColor);
+        createMatch(
+            groupId,
+            fullDate,
+            venue,
+            [],
+            [],
+            teamAName || 'Takım A',
+            teamBName || 'Takım B',
+            teamAColor,
+            teamBColor,
+            { venueAddress, venueMapsUrl, venueCoordinates }
+        );
         navigate(`/dashboard/groups/${groupId}`);
     };
 
@@ -112,20 +129,18 @@ const MatchCreate = () => {
                         </div>
                     </div>
 
-                    <div style={{ marginBottom: '1.5rem' }}>
-                        <label style={{ display: 'block', marginBottom: '0.5rem' }}>Halı Saha / Mekan</label>
-                        <div style={{ position: 'relative' }}>
-                            <MapPin size={20} style={{ position: 'absolute', left: '10px', top: '12px', color: 'var(--text-secondary)', zIndex: 10 }} />
-                            <input
-                                type="text"
-                                required
-                                placeholder="Örn: Yıldız Halı Saha"
-                                value={venue}
-                                onChange={(e) => setVenue(e.target.value)}
-                                style={{ paddingLeft: '2.5rem' }}
-                            />
-                        </div>
-                    </div>
+                    {/* Venue & Location Picker */}
+                    <VenueLocationPicker
+                        venue={venue}
+                        onVenueChange={setVenue}
+                        address={venueAddress}
+                        onAddressChange={setVenueAddress}
+                        mapsUrl={venueMapsUrl}
+                        onMapsUrlChange={setVenueMapsUrl}
+                        coordinates={venueCoordinates}
+                        onCoordinatesChange={setVenueCoordinates}
+                        isEditing={true}
+                    />
 
                     {/* Team Names & Jersey Colors Section */}
                     <div style={{

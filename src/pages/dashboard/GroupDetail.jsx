@@ -176,11 +176,13 @@ const GroupDetail = () => {
                 if (mRemaining > 0) unpaidMatchesCount += 1;
                 totalCollected += mCollected;
                 totalTarget += mTarget;
+                const mDeposit = pt.depositPaid ? (Number(pt.depositAmount) || 0) : 0;
                 trackedList.push({
                     match: m,
                     collected: mCollected,
                     target: mTarget,
                     remaining: mRemaining,
+                    deposit: mDeposit,
                     percent: mTarget > 0 ? Math.min(100, Math.round((mCollected / mTarget) * 100)) : 0
                 });
             }
@@ -1104,7 +1106,7 @@ const GroupDetail = () => {
                                     </div>
                                 ) : (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                        {groupPaymentStats.trackedList.map(({ match: tm, collected, target, remaining, percent }) => (
+                                        {groupPaymentStats.trackedList.map(({ match: tm, collected, target, remaining, deposit, percent }) => (
                                             <div
                                                 key={tm.id}
                                                 style={{
@@ -1123,9 +1125,22 @@ const GroupDetail = () => {
                                                     <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>
                                                         {tm.venue || 'Halı Saha Maçı'} {tm.date ? `(${new Date(tm.date).toLocaleDateString('tr-TR')})` : ''}
                                                     </div>
-                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
-                                                        Toplanan: <strong style={{ color: '#22c55e' }}>{collected.toLocaleString('tr-TR')} ₺</strong> / {target.toLocaleString('tr-TR')} ₺
-                                                        {remaining > 0 && <span style={{ color: '#ef4444', marginLeft: '0.5rem' }}>(Kalan: {remaining.toLocaleString('tr-TR')} ₺)</span>}
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.15rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                        <span>Toplanan: <strong style={{ color: '#22c55e' }}>{collected.toLocaleString('tr-TR')} ₺</strong> / {target.toLocaleString('tr-TR')} ₺</span>
+                                                        {remaining > 0 && <span style={{ color: '#ef4444' }}>(Kalan: {remaining.toLocaleString('tr-TR')} ₺)</span>}
+                                                        {deposit > 0 && (
+                                                            <span style={{
+                                                                fontSize: '0.7rem',
+                                                                padding: '1px 6px',
+                                                                borderRadius: '4px',
+                                                                background: 'rgba(234, 179, 8, 0.15)',
+                                                                border: '1px solid rgba(234, 179, 8, 0.3)',
+                                                                color: '#facc15',
+                                                                fontWeight: '600'
+                                                            }}>
+                                                                🔖 Kapora: {deposit.toLocaleString('tr-TR')} ₺
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>

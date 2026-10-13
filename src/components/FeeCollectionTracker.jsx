@@ -18,7 +18,9 @@ import {
     Save,
     AlertCircle,
     Hand,
-    Calculator
+    Calculator,
+    BookmarkCheck,
+    Wallet
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 
@@ -40,6 +42,28 @@ const FeeCollectionTracker = ({
     const [splitMode, setSplitMode] = useState(savedTracking.splitMode || 'auto'); // 'auto' | 'manual'
     const [manualPerPlayerFee, setManualPerPlayerFee] = useState(
         savedTracking.manualPerPlayerFee || defaultGroupFees.defaultPerPlayerFee || 150
+    );
+
+    // Kapora / Down payment settings (Yer ayırtırken verilen kapora)
+    const [depositPaid, setDepositPaid] = useState(
+        savedTracking.depositPaid !== undefined
+            ? Boolean(savedTracking.depositPaid)
+            : Boolean(savedTracking.depositAmount && Number(savedTracking.depositAmount) > 0)
+    );
+    const [depositAmount, setDepositAmount] = useState(
+        savedTracking.depositAmount !== undefined ? savedTracking.depositAmount : ''
+    );
+    const [depositPayer, setDepositPayer] = useState(
+        savedTracking.depositPayer || 'admin' // 'admin' (Yönetici) | 'cashbox' (Kasa) | 'player' (Belirli bir oyuncu)
+    );
+    const [depositPayerPlayerId, setDepositPayerPlayerId] = useState(
+        savedTracking.depositPayerPlayerId || ''
+    );
+    const [depositNote, setDepositNote] = useState(
+        savedTracking.depositNote || ''
+    );
+    const [depositDate] = useState(
+        savedTracking.depositDate || ''
     );
 
     // Goalkeeper exemption (User request: Kalecilerden para alınmasın - default to true unless explicitly disabled)
@@ -232,8 +256,11 @@ const FeeCollectionTracker = ({
         });
 
         const target = Number(totalPitchFee) || (perPlayerFee * effectiveDivisionCount);
-        const remaining = Math.max(0, target - totalCollected);
+        const deposit = depositPaid ? (Number(depositAmount) || 0) : 0;
+        const remainingPitchPayment = Math.max(0, target - deposit); // Sahaya maç günü ödenecek kalan tutar
+        const remaining = Math.max(0, target - totalCollected); // Oyunculardan toplanması gereken kalan
         const percent = target > 0 ? Math.min(100, Math.round((totalCollected / target) * 100)) : 0;
+        const netCashInHand = totalCollected - (depositPaid && depositPayer === 'admin' ? deposit : 0);
 
         return {
             totalCollected,
@@ -244,9 +271,12 @@ const FeeCollectionTracker = ({
             unpaidCount,
             partialCount,
             exemptCount,
-            totalPlayers: matchPlayers.length
+            totalPlayers: matchPlayers.length,
+            deposit,
+            remainingPitchPayment,
+            netCashInHand
         };
-    }, [matchPlayers, playerPayments, totalPitchFee, perPlayerFee, effectiveDivisionCount]);
+    }, [matchPlayers, playerPayments, totalPitchFee, perPlayerFee, effectiveDivisionCount, depositPaid, depositAmount, depositPayer]);
 
     // Update individual player payment status
     const handleSetPlayerStatus = (playerId, status) => {
@@ -346,6 +376,13 @@ const FeeCollectionTracker = ({
                 splitMode,
                 manualPerPlayerFee: Number(manualPerPlayerFee) || 0,
                 calculatedPerPlayerFee: perPlayerFee,
+                // Kapora / Yer ayırma ön ödeme bilgileri
+                depositPaid: Boolean(depositPaid),
+                depositAmount: depositPaid ? (Number(depositAmount) || 0) : 0,
+                depositPayer: depositPaid ? depositPayer : 'admin',
+                depositPayerPlayerId: (depositPaid && depositPayer === 'player') ? depositPayerPlayerId : null,
+                depositNote: depositPaid ? (depositNote || '').trim() : '',
+                depositDate: depositPaid ? (depositDate || new Date().toISOString()) : null,
                 goalkeepersExempt,
                 divisionCountMode,
                 manualDivisionCount: divisionCountMode === 'manual' ? (parseInt(manualDivisionCount, 10) || effectiveDivisionCount) : null,
@@ -431,14 +468,26 @@ const FeeCollectionTracker = ({
             `⚽ *${venueName.toUpperCase()} - MAÇ ÜCRETİ BİLDİRİMİ*`,
             matchDate ? `📅 Tarih: ${matchDate}` : '',
             `💰 *Kişi Başı Ücret: ${perPlayerFee} TL* (Toplam Saha: ${totalPitchFee} TL)`,
-            '',
+            ''
+        ];
+
+        if (depositPaid && Number(depositAmount) > 0) {
+            const payerLabel = depositPayer === 'admin'
+                ? 'Yönetici tarafından verildi'
+                : (depositPayer === 'cashbox' ? 'Grup kasasından ödendi' : `${matchPlayers.find(p => String(p.id) === String(depositPayerPlayerId))?.name || 'Oyuncu'} tarafından ödendi`);
+            lines.push(`🔖 *Ödenen Kapora:* ${Number(depositAmount)} TL (${payerLabel})`);
+            lines.push(`🏟️ *Sahaya Maç Günü Kalan Borç:* ${stats.remainingPitchPayment} TL`);
+            lines.push('');
+        }
+
+        lines.push(
             `✅ *Ödeme Yapanlar (${paidList.length}/${matchPlayers.length}):*`,
             paidList.length > 0 ? paidList.join('\n') : '• Henüz ödeme yapılmadı.',
             '',
             `⏳ *Ödeme Beklenenler (${unpaidList.length}):*`,
             unpaidList.length > 0 ? unpaidList.join('\n') : '• Herkes ödemesini tamamladı! 👏',
             ''
-        ];
+        );
 
         if (adminIban) {
             lines.push('💳 *Ödeme Bilgileri:*');
@@ -684,6 +733,56 @@ const FeeCollectionTracker = ({
                         </div>
                     </div>
 
+                    {/* Kapora Durumu Canlı Bilgi Çubuğu */}
+                    {depositPaid && Number(depositAmount) > 0 && (
+                        <div style={{
+                            background: 'linear-gradient(90deg, rgba(234, 179, 8, 0.12) 0%, rgba(30, 41, 59, 0.6) 100%)',
+                            border: '1px solid rgba(234, 179, 8, 0.35)',
+                            borderRadius: 'var(--radius-sm)',
+                            padding: '0.65rem 1rem',
+                            marginBottom: '1.25rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: '0.75rem'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                                <div style={{
+                                    width: '32px',
+                                    height: '32px',
+                                    borderRadius: '8px',
+                                    background: 'rgba(234, 179, 8, 0.2)',
+                                    color: '#facc15',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                }}>
+                                    <BookmarkCheck size={18} />
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#fef08a' }}>
+                                        Önden Kapora Ödendi: {Number(depositAmount).toLocaleString('tr-TR')} ₺
+                                        <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.7)', fontWeight: '400', marginLeft: '0.5rem' }}>
+                                            ({depositPayer === 'admin' ? 'Yönetici Cebinden' : (depositPayer === 'cashbox' ? 'Grup Kasasından' : `${matchPlayers.find(p => String(p.id) === String(depositPayerPlayerId))?.name || 'Oyuncu'} Ödedi`)})
+                                        </span>
+                                    </div>
+                                    <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', marginTop: '0.1rem' }}>
+                                        {depositNote ? `Not: ${depositNote}` : 'Yer ayırtılırken sahaya ön ödeme olarak verildi.'}
+                                    </div>
+                                </div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                                    Maç Günü Sahaya Kalan Borç:
+                                </div>
+                                <div style={{ fontSize: '1.15rem', fontWeight: '800', color: '#38bdf8' }}>
+                                    {stats.remainingPitchPayment.toLocaleString('tr-TR')} ₺
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Setup & Configuration Panel */}
                     <div style={{
                         background: 'rgba(0,0,0,0.2)',
@@ -768,6 +867,253 @@ const FeeCollectionTracker = ({
                                         onChange={(e) => setManualPerPlayerFee(e.target.value)}
                                         style={{ width: '100%', fontWeight: '600' }}
                                     />
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Yer Ayırma Kaporası (Ön Ödeme) Paneli */}
+                        <div style={{
+                            marginTop: '1rem',
+                            background: 'rgba(255, 255, 255, 0.03)',
+                            border: depositPaid ? '1px solid rgba(234, 179, 8, 0.35)' : '1px solid rgba(255, 255, 255, 0.08)',
+                            borderRadius: 'var(--radius-sm)',
+                            padding: '0.75rem 0.85rem'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.6rem' }}>
+                                <div>
+                                    <div style={{ fontSize: '0.82rem', fontWeight: '700', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                        <BookmarkCheck size={16} color={depositPaid ? '#eab308' : 'var(--text-secondary)'} />
+                                        Yer Ayırma Kaporası (Ön Ödeme)
+                                        {depositPaid && Number(depositAmount) > 0 && (
+                                            <span style={{
+                                                fontSize: '0.7rem',
+                                                padding: '1px 6px',
+                                                borderRadius: '4px',
+                                                background: 'rgba(234, 179, 8, 0.2)',
+                                                border: '1px solid rgba(234, 179, 8, 0.4)',
+                                                color: '#facc15',
+                                                fontWeight: '700'
+                                            }}>
+                                                {Number(depositAmount).toLocaleString('tr-TR')} ₺ Ödendi
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div style={{ fontSize: '0.73rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
+                                        Halısahada yer ayırtırken sahaya önden kapora verildiğinde buraya girerek kalan saha borcunu ve kasa durumunu takip edin.
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '0.4rem' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setDepositPaid(true);
+                                            if (!depositAmount || Number(depositAmount) === 0) {
+                                                setDepositAmount(500);
+                                            }
+                                        }}
+                                        style={{
+                                            padding: '0.35rem 0.7rem',
+                                            fontSize: '0.76rem',
+                                            borderRadius: '4px',
+                                            cursor: 'pointer',
+                                            border: depositPaid ? '1px solid #eab308' : '1px solid rgba(255,255,255,0.1)',
+                                            background: depositPaid ? 'rgba(234, 179, 8, 0.25)' : 'rgba(255,255,255,0.03)',
+                                            color: depositPaid ? '#fde047' : 'var(--text-secondary)',
+                                            fontWeight: depositPaid ? '700' : '500',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.3rem'
+                                        }}
+                                    >
+                                        {depositPaid && <Check size={12} />} 🔖 Kapora Verildi
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setDepositPaid(false);
+                                        }}
+                                        style={{
+                                            padding: '0.35rem 0.7rem',
+                                            fontSize: '0.76rem',
+                                            borderRadius: '4px',
+                                            cursor: 'pointer',
+                                            border: !depositPaid ? '1px solid rgba(255,255,255,0.2)' : '1px solid rgba(255,255,255,0.1)',
+                                            background: !depositPaid ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)',
+                                            color: !depositPaid ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                            fontWeight: !depositPaid ? '700' : '500',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.3rem'
+                                        }}
+                                    >
+                                        {!depositPaid && <Check size={12} />} Kapora Verilmedi
+                                    </button>
+                                </div>
+                            </div>
+
+                            {depositPaid && (
+                                <div style={{
+                                    marginTop: '0.75rem',
+                                    paddingTop: '0.75rem',
+                                    borderTop: '1px solid rgba(255,255,255,0.06)',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '0.75rem'
+                                }}>
+                                    <div style={{
+                                        display: 'grid',
+                                        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                                        gap: '0.85rem',
+                                        alignItems: 'flex-start'
+                                    }}>
+                                        {/* Kapora Tutarı */}
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#fef08a', marginBottom: '0.3rem' }}>
+                                                Ödenen Kapora Tutarı (TL)
+                                            </label>
+                                            <div style={{ position: 'relative' }}>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step="50"
+                                                    value={depositAmount}
+                                                    onChange={(e) => setDepositAmount(e.target.value)}
+                                                    placeholder="500"
+                                                    style={{
+                                                        width: '100%',
+                                                        paddingLeft: '2rem',
+                                                        fontWeight: '700',
+                                                        fontSize: '0.95rem',
+                                                        border: '1px solid #eab308'
+                                                    }}
+                                                />
+                                                <span style={{ position: 'absolute', left: '10px', top: '9px', color: '#eab308', fontWeight: '700' }}>₺</span>
+                                            </div>
+
+                                            {/* Hızlı Tutar Seçimi */}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.4rem', flexWrap: 'wrap' }}>
+                                                <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)' }}>Hızlı Seç:</span>
+                                                {[200, 300, 400, 500, 750, 1000].map(amt => (
+                                                    <button
+                                                        key={amt}
+                                                        type="button"
+                                                        onClick={() => setDepositAmount(amt)}
+                                                        style={{
+                                                            padding: '0.15rem 0.45rem',
+                                                            fontSize: '0.72rem',
+                                                            borderRadius: '4px',
+                                                            cursor: 'pointer',
+                                                            background: Number(depositAmount) === amt ? '#eab308' : 'rgba(255,255,255,0.06)',
+                                                            color: Number(depositAmount) === amt ? '#000' : '#f8fafc',
+                                                            fontWeight: '600',
+                                                            border: 'none'
+                                                        }}
+                                                    >
+                                                        {amt} ₺
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Kaporayı Kim Ödedi? */}
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '0.3rem' }}>
+                                                Kaporayı Kim Ödedi?
+                                            </label>
+                                            <select
+                                                value={depositPayer}
+                                                onChange={(e) => {
+                                                    setDepositPayer(e.target.value);
+                                                    if (e.target.value !== 'player') {
+                                                        setDepositPayerPlayerId('');
+                                                    }
+                                                }}
+                                                style={{ width: '100%', fontSize: '0.85rem', padding: '0.45rem 0.6rem' }}
+                                            >
+                                                <option value="admin">👤 Yönetici (Kendi Cebimden)</option>
+                                                <option value="cashbox">🏦 Grup Ortak Kasasından</option>
+                                                <option value="player">⚽ Belirli Bir Oyuncu Ödedi</option>
+                                            </select>
+
+                                            {depositPayer === 'player' && (
+                                                <div style={{ marginTop: '0.45rem' }}>
+                                                    <select
+                                                        value={depositPayerPlayerId}
+                                                        onChange={(e) => setDepositPayerPlayerId(e.target.value)}
+                                                        style={{ width: '100%', fontSize: '0.82rem', padding: '0.4rem 0.5rem', borderColor: '#eab308' }}
+                                                    >
+                                                        <option value="">-- Kaporayı Ödeyen Oyuncuyu Seçin --</option>
+                                                        {matchPlayers.map(p => (
+                                                            <option key={p.id} value={String(p.id)}>
+                                                                {p.name} ({p.teamName || (p.team === 'teamA' ? 'Takım A' : 'Takım B')})
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Kapora Notu / Dekont Açıklaması */}
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '0.3rem' }}>
+                                                Kapora Notu / Dekont Bilgisi
+                                            </label>
+                                            <input
+                                                type="text"
+                                                placeholder="Örn: FAST ile sahaya yollandı / Dekont no"
+                                                value={depositNote}
+                                                onChange={(e) => setDepositNote(e.target.value)}
+                                                style={{ width: '100%', fontSize: '0.85rem' }}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Sahaya Maç Günü Kalan Ödeme Bilgilendirme Kutusu */}
+                                    <div style={{
+                                        background: 'rgba(0,0,0,0.3)',
+                                        border: '1px solid rgba(234, 179, 8, 0.2)',
+                                        borderRadius: '4px',
+                                        padding: '0.6rem 0.85rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        flexWrap: 'wrap',
+                                        gap: '0.65rem'
+                                    }}>
+                                        <div style={{ fontSize: '0.8rem', color: '#f8fafc' }}>
+                                            🏟️ <strong>Toplam Saha:</strong> {Number(totalPitchFee).toLocaleString('tr-TR')} ₺ &nbsp;|&nbsp;
+                                            🔖 <strong>Verilen Kapora:</strong> <span style={{ color: '#facc15', fontWeight: '700' }}>{Number(depositAmount || 0).toLocaleString('tr-TR')} ₺</span> &nbsp;|&nbsp;
+                                            ⏳ <strong>Maç Günü Sahaya Kalan Borç:</strong> <span style={{ color: '#38bdf8', fontWeight: '800', fontSize: '0.95rem' }}>{stats.remainingPitchPayment.toLocaleString('tr-TR')} ₺</span>
+                                        </div>
+
+                                        {depositPayer === 'player' && depositPayerPlayerId && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    handleSetPlayerStatus(depositPayerPlayerId, 'paid');
+                                                    setSaveToast({
+                                                        type: 'success',
+                                                        message: 'Kaporayı ödeyen oyuncunun maç ücreti ödendi olarak işaretlendi!'
+                                                    });
+                                                    setTimeout(() => setSaveToast(null), 3000);
+                                                }}
+                                                className="btn btn-secondary"
+                                                style={{
+                                                    fontSize: '0.75rem',
+                                                    padding: '0.25rem 0.6rem',
+                                                    borderColor: '#eab308',
+                                                    color: '#fde047',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.3rem'
+                                                }}
+                                            >
+                                                <Check size={12} /> Bu Oyuncunun Maç Payını 'Ödendi' Yap
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                             )}
                         </div>

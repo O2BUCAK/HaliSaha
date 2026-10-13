@@ -8,6 +8,7 @@ import { Trophy, Save, Users, UserPlus, Video, FileText, ExternalLink, Hand, Sha
 
 import TacticalBoard from '../../components/TacticalBoard';
 import ConfirmModal from '../../components/ConfirmModal';
+import { toTitleCase, stripSenSuffix, formatPlayerDisplayName } from '../../utils';
 
 const MatchDetail = () => {
     const { matchId } = useParams();
@@ -83,6 +84,7 @@ const MatchDetail = () => {
     const [isEditing, setIsEditing] = useState(match?.status !== 'played');
     const [memberDetails, setMemberDetails] = useState([]);
     const [localRatings, setLocalRatings] = useState({});
+    const [toast, setToast] = useState(null);
 
     const [confirmModal, setConfirmModal] = useState({
         isOpen: false,
@@ -105,8 +107,10 @@ const MatchDetail = () => {
         if (match) {
             setScoreA(match.score?.a || 0);
             setScoreB(match.score?.b || 0);
-            setTeamA(match.teamA || []);
-            setTeamB(match.teamB || []);
+            const cleanA = (match.teamA || []).map(p => ({ ...p, name: stripSenSuffix(p.name) }));
+            const cleanB = (match.teamB || []).map(p => ({ ...p, name: stripSenSuffix(p.name) }));
+            setTeamA(cleanA);
+            setTeamB(cleanB);
             setTeamAName(match.teamAName || 'Takım A');
             setTeamBName(match.teamBName || 'Takım B');
             setVideoUrls(match.videoUrls || (match.videoUrl ? [match.videoUrl] : []));
@@ -147,7 +151,7 @@ const MatchDetail = () => {
     if (currentUser && !isCurrentUserInDetails && group.members?.includes(currentUserId)) {
         effectiveMemberDetails.push({
             id: currentUserId,
-            name: currentUser.name || currentUser.displayName || 'Siz',
+            name: toTitleCase(stripSenSuffix(currentUser.name || currentUser.displayName || 'Siz')),
             ...currentUser
         });
     }
@@ -155,9 +159,12 @@ const MatchDetail = () => {
     const allPlayers = [
         ...effectiveMemberDetails.map(m => ({
             id: m.id,
-            name: String(m.id) === currentUserId ? `${m.name} (Sen)` : m.name
+            name: toTitleCase(stripSenSuffix(m.name))
         })),
-        ...(group.guestPlayers || [])
+        ...(group.guestPlayers || []).map(g => ({
+            id: g.id,
+            name: toTitleCase(stripSenSuffix(g.name))
+        }))
     ].sort((a, b) => (a.name || 'Unknown').localeCompare(b.name || 'Unknown', 'tr'));
 
     const handleStatChange = (playerId, type, value) => {
@@ -210,14 +217,18 @@ const MatchDetail = () => {
     };
 
     const handleTacticalSave = async (newTeamA, newTeamB) => {
-        setTeamA(newTeamA);
-        setTeamB(newTeamB);
+        const cleanA = (newTeamA || []).map(p => ({ ...p, name: toTitleCase(stripSenSuffix(p.name)) }));
+        const cleanB = (newTeamB || []).map(p => ({ ...p, name: toTitleCase(stripSenSuffix(p.name)) }));
+        setTeamA(cleanA);
+        setTeamB(cleanB);
         // Persist immediate changes for tactical board
-        const result = await updateMatchTeams(matchId, newTeamA, newTeamB);
+        const result = await updateMatchTeams(matchId, cleanA, cleanB);
         if (result.success) {
-            alert('Taktik/Pozisyonlar kaydedildi!');
+            setToast({ type: 'success', message: 'Taktik ve pozisyonlar kaydedildi!' });
+            setTimeout(() => setToast(null), 3000);
         } else {
-            alert('Kaydedilirken hata oluştu.');
+            setToast({ type: 'error', message: 'Kaydedilirken hata oluştu.' });
+            setTimeout(() => setToast(null), 4000);
         }
     };
 
@@ -259,7 +270,11 @@ const MatchDetail = () => {
 
         const result = await givePlayerRating(matchId, playerId, score);
         if (!result.success) {
-            alert(result.error || 'Puan verilirken bir hata oluştu.');
+            setToast({ type: 'error', message: result.error || 'Puan verilirken bir hata oluştu.' });
+            setTimeout(() => setToast(null), 5000);
+        } else {
+            setToast({ type: 'success', message: 'Puanınız başarıyla kaydedildi.' });
+            setTimeout(() => setToast(null), 3000);
         }
     };
 
@@ -326,6 +341,29 @@ const MatchDetail = () => {
 
     return (
         <div className="container" style={{ maxWidth: '1000px' }}>
+            {toast && (
+                <div style={{
+                    marginBottom: '1rem',
+                    padding: '0.75rem 1rem',
+                    borderRadius: 'var(--radius-md)',
+                    background: toast.type === 'success' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                    border: `1px solid ${toast.type === 'success' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                    color: toast.type === 'success' ? '#22c55e' : '#ef4444',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    fontSize: '0.9rem',
+                    fontWeight: '500'
+                }}>
+                    <span>{toast.message}</span>
+                    <button
+                        onClick={() => setToast(null)}
+                        style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', padding: '0 4px', fontSize: '1.2rem', lineHeight: '1' }}
+                    >
+                        ×
+                    </button>
+                </div>
+            )}
             <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Link to={`/dashboard/groups/${group?.id || match?.groupId || ''}`} className="btn btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem' }}>
                     <ArrowLeft size={16} /> Gruba Dön
@@ -363,7 +401,8 @@ const MatchDetail = () => {
                 <button
                     onClick={() => {
                         navigator.clipboard.writeText(window.location.href);
-                        alert('Maç bağlantısı kopyalandı! Bu linki arkadaşlarınızla paylaşabilirsiniz.');
+                        setToast({ type: 'success', message: 'Maç bağlantısı kopyalandı! Arkadaşlarınızla paylaşabilirsiniz.' });
+                        setTimeout(() => setToast(null), 3500);
                     }}
                     className="btn btn-secondary"
                     style={{ margin: '0 auto 1.5rem auto', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
@@ -530,7 +569,7 @@ const MatchDetail = () => {
                                     border: '1px solid var(--border-color)'
                                 }}>
                                     <span style={{ marginRight: '0.5rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        {player.name}
+                                        {formatPlayerDisplayName(player, currentUserId)}
                                         {(inA?.isGoalkeeper || inB?.isGoalkeeper) && <Hand size={14} fill="gold" color="gold" />}
                                     </span>
                                     <div style={{ display: 'flex', gap: '0.25rem' }}>
@@ -595,7 +634,7 @@ const MatchDetail = () => {
                     {teamA.map(player => (
                         <div key={player.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
                             <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                {player.name}
+                                {formatPlayerDisplayName(player, currentUserId)}
                                 {player.isGoalkeeper && <Hand size={14} fill="gold" color="gold" />}
                             </span>
                             <div style={{ display: 'flex', gap: '1rem' }}>
@@ -689,7 +728,7 @@ const MatchDetail = () => {
                     {teamB.map(player => (
                         <div key={player.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
                             <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                {player.name}
+                                {formatPlayerDisplayName(player, currentUserId)}
                                 {player.isGoalkeeper && <Hand size={14} fill="gold" color="gold" />}
                             </span>
                             <div style={{ display: 'flex', gap: '1rem' }}>

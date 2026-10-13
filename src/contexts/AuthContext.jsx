@@ -151,9 +151,11 @@ export const AuthProvider = ({ children }) => {
             const userDoc = await getDoc(userDocRef);
 
             if (!userDoc.exists()) {
+                const formattedName = toTitleCase(user.displayName || 'Kullanıcı');
                 const userData = {
                     id: user.uid,
-                    name: user.displayName || 'Kullanıcı',
+                    name: formattedName,
+                    nickname: formattedName,
                     email: user.email,
                     createdAt: new Date().toISOString(),
                     bio: '',

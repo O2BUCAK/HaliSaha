@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { stripSenSuffix } from '../utils';
 
 const TacticalBoard = ({ match, group, onSave, readOnly = false }) => {
     const [players, setPlayers] = useState([]);
@@ -10,6 +11,7 @@ const TacticalBoard = ({ match, group, onSave, readOnly = false }) => {
         // Initialize players with saved positions or default positions
         const teamAPlayers = (match.teamA || []).map(p => ({
             ...p,
+            name: stripSenSuffix(p.name),
             team: 'teamA',
             x: p.x || 20,
             y: p.y || 50,
@@ -19,6 +21,7 @@ const TacticalBoard = ({ match, group, onSave, readOnly = false }) => {
 
         const teamBPlayers = (match.teamB || []).map(p => ({
             ...p,
+            name: stripSenSuffix(p.name),
             team: 'teamB',
             x: p.x || 80,
             y: p.y || 50,

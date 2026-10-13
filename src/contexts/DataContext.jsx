@@ -17,7 +17,7 @@ import {
     deleteField,
     serverTimestamp
 } from 'firebase/firestore';
-import { toTitleCase } from '../utils';
+import { toTitleCase, stripSenSuffix } from '../utils';
 
 const DataContext = createContext();
 
@@ -572,7 +572,10 @@ export const DataProvider = ({ children }) => {
             return { success: true };
         } catch (error) {
             console.error("Error giving rating:", error);
-            return { success: false, error: error.message || 'Puan verilirken hata oluştu.' };
+            const errMsg = error?.code === 'permission-denied'
+                ? 'Puan vermek için yetkiniz bulunmuyor veya oturumunuz geçersiz.'
+                : (error?.message || 'Puan verilirken hata oluştu.');
+            return { success: false, error: errMsg };
         }
     };
 
@@ -851,17 +854,27 @@ export const DataProvider = ({ children }) => {
         const group = groups.find(g => g.id === groupId);
         const seasonId = group?.activeSeasonId || null;
 
+        const cleanTeamA = (teamA || []).map(p => ({
+            ...p,
+            name: toTitleCase(stripSenSuffix(p.name))
+        }));
+        const cleanTeamB = (teamB || []).map(p => ({
+            ...p,
+            name: toTitleCase(stripSenSuffix(p.name))
+        }));
+
         const newMatch = {
             groupId,
             seasonId,
             date,
             venue,
-            teamA,
-            teamB,
+            teamA: cleanTeamA,
+            teamB: cleanTeamB,
             teamAName,
             teamBName,
             status: 'scheduled',
             score: null,
+            ratings: {},
             stats: {},
             createdAt: serverTimestamp()
         };
@@ -876,13 +889,22 @@ export const DataProvider = ({ children }) => {
 
     const finishMatch = async (matchId, scoreA, scoreB, playerStats, teamA, teamB, teamAName, teamBName, videoUrls = [], matchSummary = '') => {
         try {
+            const cleanTeamA = (teamA || []).map(p => ({
+                ...p,
+                name: toTitleCase(stripSenSuffix(p.name))
+            }));
+            const cleanTeamB = (teamB || []).map(p => ({
+                ...p,
+                name: toTitleCase(stripSenSuffix(p.name))
+            }));
+
             const matchRef = doc(db, 'matches', matchId);
             await updateDoc(matchRef, {
                 status: 'played',
                 score: { a: scoreA, b: scoreB },
                 stats: playerStats,
-                teamA,
-                teamB,
+                teamA: cleanTeamA,
+                teamB: cleanTeamB,
                 teamAName,
                 teamBName,
                 videoUrls,
@@ -991,10 +1013,19 @@ export const DataProvider = ({ children }) => {
 
     const updateMatchTeams = async (matchId, teamA, teamB) => {
         try {
+            const cleanTeamA = (teamA || []).map(p => ({
+                ...p,
+                name: toTitleCase(stripSenSuffix(p.name))
+            }));
+            const cleanTeamB = (teamB || []).map(p => ({
+                ...p,
+                name: toTitleCase(stripSenSuffix(p.name))
+            }));
+
             const matchRef = doc(db, 'matches', matchId);
             await updateDoc(matchRef, {
-                teamA,
-                teamB
+                teamA: cleanTeamA,
+                teamB: cleanTeamB
             });
             return { success: true };
         } catch (error) {
@@ -1075,7 +1106,7 @@ export const DataProvider = ({ children }) => {
                 if (!stats[player.id]) {
                     stats[player.id] = {
                         id: player.id,
-                        name: player.name || 'Bilinmeyen',
+                        name: toTitleCase(stripSenSuffix(player.name || 'Bilinmeyen')),
                         matches: 0,
                         goals: 0,
                         assists: 0,

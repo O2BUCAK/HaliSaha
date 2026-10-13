@@ -1,13 +1,17 @@
 import { useEffect } from 'react';
 
 /**
- * Converts Turkish string to title case properly.
+ * Converts Turkish string to title case properly with Turkish locale.
  */
 export const toTitleCase = (str) => {
     if (!str) return '';
-    return String(str).trim().toLocaleLowerCase('tr-TR').split(/\s+/).map(word =>
-        word.charAt(0).toLocaleUpperCase('tr-TR') + word.slice(1)
-    ).join(' ');
+    return String(str)
+        .trim()
+        .toLocaleLowerCase('tr-TR')
+        .split(/\s+/)
+        .filter(Boolean)
+        .map(word => word.charAt(0).toLocaleUpperCase('tr-TR') + word.slice(1))
+        .join(' ');
 };
 
 /**
@@ -108,3 +112,39 @@ export const useSEO = ({ title, description }) => {
         }
     }, [title, description]);
 };
+
+/**
+ * Strips any "(Sen)", "(sen)", "(Siz)" suffix from a player or user name.
+ */
+export const stripSenSuffix = (name) => {
+    if (!name || typeof name !== 'string') return '';
+    return name.replace(/\s*\([Ss](en|iz)\)$/gi, '').trim();
+};
+
+/**
+ * Formats a player or user display name.
+ * Applies proper Turkish Title Case capitalization.
+ * ONLY appends " (Sen)" if the player's ID matches the logged-in user's ID.
+ */
+export const formatPlayerDisplayName = (playerOrName, currentUserId, playerId = null) => {
+    let rawName = '';
+    let targetId = playerId;
+
+    if (playerOrName && typeof playerOrName === 'object') {
+        rawName = playerOrName.name || playerOrName.nickname || playerOrName.displayName || '';
+        targetId = targetId || playerOrName.id || playerOrName.uid;
+    } else {
+        rawName = String(playerOrName || '');
+    }
+
+    const clean = stripSenSuffix(rawName);
+    if (!clean) return '';
+
+    const titleCased = toTitleCase(clean);
+
+    if (currentUserId && targetId && String(targetId) === String(currentUserId)) {
+        return `${titleCased} (Sen)`;
+    }
+    return titleCased;
+};
+

@@ -12,18 +12,18 @@ service cloud.firestore {
     }
 
     function isGroupAdmin(groupId) {
-      let groupDoc = get(/databases/$(database)/documents/groups/$(groupId));
-      return isSignedIn() && groupDoc != null && (
-        request.auth.uid == groupDoc.data.createdBy || 
-        (groupDoc.data.keys().hasAll(['admins']) && request.auth.uid in groupDoc.data.admins)
+      let groupPath = /databases/$(database)/documents/groups/$(groupId);
+      return isSignedIn() && groupId != null && exists(groupPath) && (
+        request.auth.uid == get(groupPath).data.createdBy || 
+        ('admins' in get(groupPath).data && request.auth.uid in get(groupPath).data.admins)
       );
     }
 
     function isGroupMember(groupId) {
-      let groupDoc = get(/databases/$(database)/documents/groups/$(groupId));
-      return isSignedIn() && groupDoc != null && (
-        request.auth.uid == groupDoc.data.createdBy ||
-        (groupDoc.data.keys().hasAll(['members']) && request.auth.uid in groupDoc.data.members)
+      let groupPath = /databases/$(database)/documents/groups/$(groupId);
+      return isSignedIn() && groupId != null && exists(groupPath) && (
+        request.auth.uid == get(groupPath).data.createdBy ||
+        ('members' in get(groupPath).data && request.auth.uid in get(groupPath).data.members)
       );
     }
 
@@ -98,8 +98,8 @@ service cloud.firestore {
       
       // Admins can update all match fields. Signed-in members/players can update 'ratings'
       allow update: if isSignedIn() && (
-        isGroupAdmin(resource.data.groupId) ||
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ratings'])
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ratings']) ||
+        isGroupAdmin(resource.data.groupId)
       );
       
       allow delete: if isSignedIn() && (

@@ -6,12 +6,23 @@ import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { User, Mail, Edit2, Save, X, Instagram, Twitter, Facebook, Linkedin, Database, ShieldCheck, Trash2 } from 'lucide-react';
 import { toTitleCase, useSEO } from '../utils';
 import KvkkModal from '../components/KvkkModal';
+import ConfirmModal from '../components/ConfirmModal';
 
 const Profile = () => {
     const { currentUser, updateProfile, deleteAccount } = useAuth();
     const navigate = useNavigate();
     const [showKvkkModal, setShowKvkkModal] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [confirmModal, setConfirmModal] = useState({
+        isOpen: false,
+        title: '',
+        message: '',
+        confirmText: 'Evet, Onayla',
+        isDanger: true,
+        isLoading: false,
+        error: null,
+        onConfirm: null
+    });
     
     useSEO({
         title: 'Profilim',
@@ -63,116 +74,141 @@ const Profile = () => {
         }
     };
 
-    const handleDeleteAccount = async () => {
-        const confirmed = window.confirm(
-            "6698 Sayılı KVKK Madde 11 (Unutulma Hakkı) kapsamında hesabınızı ve tüm kişisel verilerinizi kalıcı olarak silmek istediğinizden emin misiniz?\n\nBu işlem geri alınamaz!"
-        );
-        if (!confirmed) return;
-
-        setIsDeleting(true);
-        setMessage({ type: 'success', text: 'Hesap ve veriler siliniyor...' });
-        const result = await deleteAccount();
-        if (result.success) {
-            navigate('/');
-        } else {
-            setIsDeleting(false);
-            setMessage({ type: 'error', text: result.error });
-        }
+    const handleDeleteAccount = () => {
+        setConfirmModal({
+            isOpen: true,
+            title: 'Hesabımı ve Verilerimi Sil',
+            message: '6698 Sayılı KVKK Madde 11 (Unutulma Hakkı) kapsamında hesabınızı ve tüm kişisel verilerinizi kalıcı olarak silmek istediğinizden emin misiniz? Bu işlem geri alınamaz!',
+            confirmText: 'Evet, Hesabımı Sil',
+            cancelText: 'Vazgeç',
+            isDanger: true,
+            isLoading: false,
+            error: null,
+            onConfirm: async () => {
+                setConfirmModal(prev => ({ ...prev, isLoading: true, error: null }));
+                setIsDeleting(true);
+                setMessage({ type: 'success', text: 'Hesap ve veriler siliniyor...' });
+                const result = await deleteAccount();
+                if (result.success) {
+                    navigate('/');
+                } else {
+                    setIsDeleting(false);
+                    setConfirmModal(prev => ({
+                        ...prev,
+                        isLoading: false,
+                        error: result.error || 'Hesap silinirken hata oluştu.'
+                    }));
+                }
+            }
+        });
     };
 
-    const handleMigration = async () => {
-        if (!window.confirm('Veritabanındaki tüm isimleri güncelleyip, eski kayıtları düzeltecek. Emin misiniz?')) return;
+    const handleMigration = () => {
+        setConfirmModal({
+            isOpen: true,
+            title: 'Verileri Güncelle (Eski Kayıtları Düzelt)',
+            message: 'Veritabanındaki tüm isimleri güncelleyip, baş harfleri büyük yapacak ve eski kayıtları düzeltecektir. Devam etmek istiyor musunuz?',
+            confirmText: 'Evet, Güncelle',
+            cancelText: 'Vazgeç',
+            isDanger: false,
+            isLoading: false,
+            error: null,
+            onConfirm: async () => {
+                setConfirmModal(prev => ({ ...prev, isLoading: true, error: null }));
+                try {
+                    setMessage({ type: 'success', text: 'Güncelleme başladı...' });
 
-        try {
-            setMessage({ type: 'success', text: 'Güncelleme başladı...' });
-
-            // 1. Update Users
-            const usersRef = collection(db, 'users');
-            const usersSnap = await getDocs(usersRef);
-            const batchPromises = [];
-
-            for (const userDoc of usersSnap.docs) {
-                const userData = userDoc.data();
-                if (userData.name) {
-                    const newName = toTitleCase(userData.name);
-                    if (newName !== userData.name) {
-                        batchPromises.push(updateDoc(doc(db, 'users', userDoc.id), { name: newName }));
-                    }
-                }
-            }
-
-            // 2. Update Groups (Guest Players)
-            const groupsRef = collection(db, 'groups');
-            const groupsSnap = await getDocs(groupsRef);
-
-            for (const groupDoc of groupsSnap.docs) {
-                const groupData = groupDoc.data();
-                if (groupData.guestPlayers && groupData.guestPlayers.length > 0) {
-                    const updatedGuests = groupData.guestPlayers.map(g => ({
-                        ...g,
-                        name: toTitleCase(g.name)
-                    }));
-                    batchPromises.push(updateDoc(doc(db, 'groups', groupDoc.id), { guestPlayers: updatedGuests }));
-                }
-            }
-
-            // 3. Update Matches (Fix player team names)
-            const matchesRef = collection(db, 'matches');
-            const matchesSnap = await getDocs(matchesRef);
-
-            for (const matchDoc of matchesSnap.docs) {
-                const matchData = matchDoc.data();
-                let needsUpdate = false;
-                const updatePayload = {};
-
-                const fixPlayers = (players) => {
-                    if (!players) return [];
-                    return players.map(p => ({
-                        ...p,
-                        name: toTitleCase(p.name)
-                    }));
-                };
-
-                if (matchData.teamA) {
-                    updatePayload.teamA = fixPlayers(matchData.teamA);
-                    needsUpdate = true;
-                }
-                if (matchData.teamB) {
-                    updatePayload.teamB = fixPlayers(matchData.teamB);
-                    needsUpdate = true;
-                }
-
-                // Fix stats names if present
-                if (matchData.stats) {
-                    const newStats = {};
-                    let statsUpdated = false;
-                    Object.entries(matchData.stats).forEach(([id, stat]) => {
-                        if (stat.name) {
-                            newStats[id] = { ...stat, name: toTitleCase(stat.name) };
-                            statsUpdated = true;
-                        } else {
-                            newStats[id] = stat;
+                    // 1. Update Current User if name needs title casing
+                    if (currentUser) {
+                        const currentName = currentUser.name || '';
+                        const formattedName = toTitleCase(currentName);
+                        if (formattedName && formattedName !== currentName) {
+                            await updateProfile({ name: formattedName });
                         }
-                    });
-                    if (statsUpdated) {
-                        updatePayload.stats = newStats;
-                        needsUpdate = true;
                     }
-                }
 
-                if (needsUpdate) {
-                    batchPromises.push(updateDoc(doc(db, 'matches', matchDoc.id), updatePayload));
+                    // 2. Update Groups (Guest Players)
+                    const groupsRef = collection(db, 'groups');
+                    const groupsSnap = await getDocs(groupsRef);
+                    for (const groupDoc of groupsSnap.docs) {
+                        const groupData = groupDoc.data();
+                        if (groupData.guestPlayers && groupData.guestPlayers.length > 0) {
+                            const updatedGuests = groupData.guestPlayers.map(g => ({
+                                ...g,
+                                name: toTitleCase(g.name)
+                            }));
+                            try {
+                                await updateDoc(doc(db, 'groups', groupDoc.id), { guestPlayers: updatedGuests });
+                            } catch (gErr) {
+                                console.warn("Group update error:", gErr);
+                            }
+                        }
+                    }
+
+                    // 3. Update Matches (Fix player team names)
+                    const matchesRef = collection(db, 'matches');
+                    const matchesSnap = await getDocs(matchesRef);
+                    for (const matchDoc of matchesSnap.docs) {
+                        const matchData = matchDoc.data();
+                        let needsUpdate = false;
+                        const updatePayload = {};
+
+                        const fixPlayers = (players) => {
+                            if (!players) return [];
+                            return players.map(p => ({
+                                ...p,
+                                name: toTitleCase(p.name)
+                            }));
+                        };
+
+                        if (matchData.teamA) {
+                            updatePayload.teamA = fixPlayers(matchData.teamA);
+                            needsUpdate = true;
+                        }
+                        if (matchData.teamB) {
+                            updatePayload.teamB = fixPlayers(matchData.teamB);
+                            needsUpdate = true;
+                        }
+
+                        if (matchData.stats) {
+                            const newStats = {};
+                            let statsUpdated = false;
+                            Object.entries(matchData.stats).forEach(([id, stat]) => {
+                                if (stat.name) {
+                                    newStats[id] = { ...stat, name: toTitleCase(stat.name) };
+                                    statsUpdated = true;
+                                } else {
+                                    newStats[id] = stat;
+                                }
+                            });
+                            if (statsUpdated) {
+                                updatePayload.stats = newStats;
+                                needsUpdate = true;
+                            }
+                        }
+
+                        if (needsUpdate) {
+                            try {
+                                await updateDoc(doc(db, 'matches', matchDoc.id), updatePayload);
+                            } catch (mErr) {
+                                console.warn("Match update error:", mErr);
+                            }
+                        }
+                    }
+
+                    setConfirmModal(prev => ({ ...prev, isOpen: false, isLoading: false }));
+                    setMessage({ type: 'success', text: 'Veritabanı başarıyla güncellendi!' });
+                    setTimeout(() => setMessage(null), 5000);
+                } catch (error) {
+                    console.error("Migration Error:", error);
+                    setConfirmModal(prev => ({
+                        ...prev,
+                        isLoading: false,
+                        error: 'Güncelleme sırasında hata oluştu: ' + (error.message || error)
+                    }));
                 }
             }
-
-            await Promise.all(batchPromises);
-            setMessage({ type: 'success', text: 'Veritabanı başarıyla güncellendi!' });
-            setTimeout(() => setMessage(null), 5000);
-
-        } catch (error) {
-            console.error("Migration Error:", error);
-            setMessage({ type: 'error', text: 'Güncelleme sırasında hata oluştu.' });
-        }
+        });
     };
 
     if (!currentUser) return <div>Giriş yapmalısınız.</div>;
@@ -330,11 +366,11 @@ const Profile = () => {
                                     marginBottom: '1rem', fontSize: '3rem', fontWeight: 'bold', color: 'var(--accent-primary)',
                                     boxShadow: 'var(--shadow-glow)'
                                 }}>
-                                    {currentUser.name.charAt(0).toUpperCase()}
+                                    {toTitleCase(currentUser.name || 'U').charAt(0).toUpperCase()}
                                 </div>
-                                <h3 style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>{currentUser.nickname || currentUser.name}</h3>
+                                <h3 style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>{toTitleCase(currentUser.nickname || currentUser.name)}</h3>
                                 <div style={{ fontSize: '1rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                                    {currentUser.name}
+                                    {toTitleCase(currentUser.name)}
                                 </div>
                                 <div style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                     <Mail size={16} /> {currentUser.email}
@@ -459,6 +495,23 @@ const Profile = () => {
             </div>
 
             <KvkkModal isOpen={showKvkkModal} onClose={() => setShowKvkkModal(false)} />
+
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                confirmText={confirmModal.confirmText || 'Evet, Onayla'}
+                cancelText={confirmModal.cancelText || 'Vazgeç'}
+                isDanger={confirmModal.isDanger !== false}
+                isLoading={confirmModal.isLoading}
+                error={confirmModal.error}
+                onConfirm={confirmModal.onConfirm}
+                onClose={() => {
+                    if (!confirmModal.isLoading) {
+                        setConfirmModal(prev => ({ ...prev, isOpen: false, error: null, onConfirm: null }));
+                    }
+                }}
+            />
         </div>
     );
 };

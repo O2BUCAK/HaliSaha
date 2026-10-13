@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { toTitleCase } from '../../utils';
+import { toTitleCase, stripSenSuffix, formatPlayerDisplayName } from '../../utils';
 import InviteMember from '../../components/InviteMember';
 import AdSenseBanner from '../../components/AdSenseBanner';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -62,13 +62,19 @@ const GroupDetail = () => {
         )
     );
 
-    const [deleteModal, setDeleteModal] = useState({
+    const [confirmModal, setConfirmModal] = useState({
         isOpen: false,
-        matchId: null,
-        isPlayed: false,
+        title: '',
+        message: '',
+        confirmText: 'Evet, Sil',
+        cancelText: 'Vazgeç',
+        isDanger: true,
         isLoading: false,
-        error: null
+        error: null,
+        onConfirm: null
     });
+    const [mergeError, setMergeError] = useState('');
+    const [isMerging, setIsMerging] = useState(false);
     const [actionSuccessMsg, setActionSuccessMsg] = useState('');
 
     const [loading, setLoading] = useState(!contextGroup); // Initial loading if not in context
@@ -251,58 +257,112 @@ const GroupDetail = () => {
         }
     };
 
-    const handleRemoveMember = async (memberId) => {
+    const handleRemoveMember = (member) => {
         if (!isAdmin) return;
-        if (window.confirm('Bu üyeyi gruptan çıkarmak istediğinize emin misiniz?')) {
-            await removeMember(groupId, memberId);
-        }
-    };
-
-    const handleRemoveGuest = async (guestId) => {
-        if (!isAdmin) return;
-        if (window.confirm('Bu misafir oyuncuyu silmek istediğinize emin misiniz?')) {
-            await removeGuestMember(groupId, guestId);
-        }
-    };
-
-    const handleDeleteMatch = (matchId, isPlayed = false) => {
-        setDeleteModal({
+        const memberName = toTitleCase(member.name || member.nickname || 'Bu üyeyi');
+        setConfirmModal({
             isOpen: true,
-            matchId,
-            isPlayed,
+            title: 'Üyeyi Gruptan Çıkar',
+            message: `"${memberName}" adlı üyeyi gruptan çıkarmak istediğinize emin misiniz?`,
+            confirmText: 'Evet, Çıkar',
+            cancelText: 'Vazgeç',
+            isDanger: true,
             isLoading: false,
-            error: null
+            error: null,
+            onConfirm: async () => {
+                setConfirmModal(prev => ({ ...prev, isLoading: true, error: null }));
+                const result = await removeMember(groupId, member.id);
+                if (result.success) {
+                    setConfirmModal({ isOpen: false, title: '', message: '', confirmText: '', cancelText: '', isDanger: true, isLoading: false, error: null, onConfirm: null });
+                    setActionSuccessMsg('Üye gruptan çıkarıldı.');
+                    setTimeout(() => setActionSuccessMsg(''), 4000);
+                } else {
+                    setConfirmModal(prev => ({ ...prev, isLoading: false, error: result.error || 'Üye çıkarılırken hata oluştu.' }));
+                }
+            }
         });
     };
 
-    const handleConfirmDeleteMatch = async () => {
-        if (!deleteModal.matchId) return;
-        setDeleteModal(prev => ({ ...prev, isLoading: true, error: null }));
-        const result = await deleteMatch(deleteModal.matchId);
-        if (result.success) {
-            setDeleteModal({ isOpen: false, matchId: null, isPlayed: false, isLoading: false, error: null });
-            setActionSuccessMsg('Maç başarıyla silindi.');
-            setTimeout(() => setActionSuccessMsg(''), 4000);
-        } else {
-            setDeleteModal(prev => ({
-                ...prev,
-                isLoading: false,
-                error: result.error || 'Maç silinirken hata oluştu.'
-            }));
-        }
+    const handleRemoveGuest = (guest) => {
+        if (!isAdmin) return;
+        const guestName = toTitleCase(guest.name || 'Bu misafiri');
+        setConfirmModal({
+            isOpen: true,
+            title: 'Misafir Oyuncuyu Sil',
+            message: `"${guestName}" adlı misafir oyuncuyu silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`,
+            confirmText: 'Evet, Sil',
+            cancelText: 'Vazgeç',
+            isDanger: true,
+            isLoading: false,
+            error: null,
+            onConfirm: async () => {
+                setConfirmModal(prev => ({ ...prev, isLoading: true, error: null }));
+                const result = await removeGuestMember(groupId, guest.id);
+                if (result.success) {
+                    setConfirmModal({ isOpen: false, title: '', message: '', confirmText: '', cancelText: '', isDanger: true, isLoading: false, error: null, onConfirm: null });
+                    setActionSuccessMsg('Misafir oyuncu başarıyla silindi.');
+                    setTimeout(() => setActionSuccessMsg(''), 4000);
+                } else {
+                    setConfirmModal(prev => ({ ...prev, isLoading: false, error: result.error || 'Misafir silinirken hata oluştu.' }));
+                }
+            }
+        });
     };
 
-    const handleToggleAdmin = async (memberId, isCurrentAdmin) => {
+    const handleDeleteMatch = (matchId, isPlayed = false) => {
         if (!isAdmin) return;
-        if (isCurrentAdmin) {
-            if (window.confirm('Bu kişinin yöneticiliğini almak istediğinize emin misiniz?')) {
-                await removeAdmin(groupId, memberId);
+        setConfirmModal({
+            isOpen: true,
+            title: isPlayed ? 'Maçı Sil' : 'Planlanan Maçı Sil',
+            message: isPlayed
+                ? 'Bu maçı silmek istediğinize emin misiniz? Maç ve varsa ilişkili tüm istatistikler kalıcı olarak kaldırılacaktır.'
+                : 'Bu planlanan maçı silmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
+            confirmText: 'Evet, Maçı Sil',
+            cancelText: 'Vazgeç',
+            isDanger: true,
+            isLoading: false,
+            error: null,
+            onConfirm: async () => {
+                setConfirmModal(prev => ({ ...prev, isLoading: true, error: null }));
+                const result = await deleteMatch(matchId);
+                if (result.success) {
+                    setConfirmModal({ isOpen: false, title: '', message: '', confirmText: '', cancelText: '', isDanger: true, isLoading: false, error: null, onConfirm: null });
+                    setActionSuccessMsg('Maç başarıyla silindi.');
+                    setTimeout(() => setActionSuccessMsg(''), 4000);
+                } else {
+                    setConfirmModal(prev => ({ ...prev, isLoading: false, error: result.error || 'Maç silinirken hata oluştu.' }));
+                }
             }
-        } else {
-            if (window.confirm('Bu kişiyi yönetici yapmak istediğinize emin misiniz?')) {
-                await addAdmin(groupId, memberId);
+        });
+    };
+
+    const handleToggleAdmin = (memberId, isCurrentAdmin) => {
+        if (!isAdmin) return;
+        setConfirmModal({
+            isOpen: true,
+            title: isCurrentAdmin ? 'Yöneticiliği Al' : 'Yönetici Yap',
+            message: isCurrentAdmin
+                ? 'Bu kullanıcının grup yöneticiliği yetkisini almak istediğinize emin misiniz?'
+                : 'Bu kullanıcıyı grup yöneticisi yapmak istediğinize emin misiniz? Yönetici olan üyeler maç oluşturup düzenleyebilir.',
+            confirmText: isCurrentAdmin ? 'Evet, Yetkiyi Al' : 'Evet, Yönetici Yap',
+            cancelText: 'Vazgeç',
+            isDanger: isCurrentAdmin,
+            isLoading: false,
+            error: null,
+            onConfirm: async () => {
+                setConfirmModal(prev => ({ ...prev, isLoading: true, error: null }));
+                const result = isCurrentAdmin
+                    ? await removeAdmin(groupId, memberId)
+                    : await addAdmin(groupId, memberId);
+                if (result.success) {
+                    setConfirmModal({ isOpen: false, title: '', message: '', confirmText: '', cancelText: '', isDanger: true, isLoading: false, error: null, onConfirm: null });
+                    setActionSuccessMsg(isCurrentAdmin ? 'Yöneticilik yetkisi alındı.' : 'Yönetici yapıldı.');
+                    setTimeout(() => setActionSuccessMsg(''), 4000);
+                } else {
+                    setConfirmModal(prev => ({ ...prev, isLoading: false, error: result.error || 'İşlem başarısız.' }));
+                }
             }
-        }
+        });
     };
 
     const handleJerseyChange = (userId, number) => {
@@ -318,36 +378,52 @@ const GroupDetail = () => {
         setSelectedGuestForMerge(guest);
         setShowMergeModal(true);
         setSelectedMemberForMerge('');
+        setMergeError('');
     };
 
     const handleMergeGuest = async () => {
         if (!selectedGuestForMerge || !selectedMemberForMerge) return;
-
-        if (window.confirm(`${selectedGuestForMerge.name} adlı misafir oyuncuyu, seçilen üyeyle eşleştirmek istiyor musunuz? Bu işlem geri alınamaz ve tüm geçmiş istatistikler aktarılacaktır.`)) {
-            const result = await mergeGuestToUser(groupId, selectedGuestForMerge.id, selectedMemberForMerge);
-            if (result.success) {
-                alert('Eşleştirme başarılı!');
-                setShowMergeModal(false);
-                setSelectedGuestForMerge(null);
-                // Refresh happens automatically via Snapshot
-            } else {
-                alert(result.error);
-            }
+        setIsMerging(true);
+        setMergeError('');
+        const result = await mergeGuestToUser(groupId, selectedGuestForMerge.id, selectedMemberForMerge);
+        setIsMerging(false);
+        if (result.success) {
+            setShowMergeModal(false);
+            setSelectedGuestForMerge(null);
+            setSelectedMemberForMerge('');
+            setActionSuccessMsg('Misafir oyuncu başarıyla üyeyle eşleştirildi.');
+            setTimeout(() => setActionSuccessMsg(''), 4000);
+        } else {
+            setMergeError(result.error || 'Eşleştirme yapılamadı.');
         }
     };
 
     const hasGuestDuplicates = group?.guestPlayers?.length > 0 &&
         (new Set(group.guestPlayers.map(p => p.name.trim().toLowerCase().replace(/\s+/g, ' '))).size !== group.guestPlayers.length);
 
-    const handleCleanupDuplicates = async () => {
-        if (window.confirm('Yinelenen misafir oyuncular temizlenecek (ilk eklenen korunacak, diğerleri ve istatistikleri silinecektir). Devam etmek istiyor musunuz?')) {
-            const result = await cleanupGuestDuplicates(groupId);
-            if (result.success) {
-                alert(`${result.count} adet yinelenen kayıt silindi.`);
-            } else {
-                alert('Hata: ' + result.error);
+    const handleCleanupDuplicates = () => {
+        if (!isAdmin) return;
+        setConfirmModal({
+            isOpen: true,
+            title: 'Tekrarlayan Misafirleri Temizle',
+            message: 'Yinelenen misafir oyuncular temizlenecektir (ilk eklenen kayıt korunur, geçmiş maçlardaki istatistikler ve puanlar aktarılır). Devam etmek istiyor musunuz?',
+            confirmText: 'Evet, Temizle',
+            cancelText: 'Vazgeç',
+            isDanger: false,
+            isLoading: false,
+            error: null,
+            onConfirm: async () => {
+                setConfirmModal(prev => ({ ...prev, isLoading: true, error: null }));
+                const result = await cleanupGuestDuplicates(groupId);
+                if (result.success) {
+                    setConfirmModal({ isOpen: false, title: '', message: '', confirmText: '', cancelText: '', isDanger: true, isLoading: false, error: null, onConfirm: null });
+                    setActionSuccessMsg(`${result.count || 0} adet yinelenen kayıt başarıyla temizlendi.`);
+                    setTimeout(() => setActionSuccessMsg(''), 4000);
+                } else {
+                    setConfirmModal(prev => ({ ...prev, isLoading: false, error: result.error || 'Temizleme sırasında hata oluştu.' }));
+                }
             }
-        }
+        });
     };
 
     return (
@@ -606,7 +682,8 @@ const GroupDetail = () => {
                                             {(() => {
                                                 const member = memberDetails.find(m => m.id === stat.id);
                                                 // Prefer member name (from live profile), fallback to stat name (historical/guest)
-                                                return member ? (member.name || member.nickname) : stat.name;
+                                                const rawName = member ? (member.name || member.nickname) : stat.name;
+                                                return formatPlayerDisplayName(rawName, currentUserId, stat.id);
                                             })()}
                                         </td>
                                         <td style={{ padding: '0.75rem', textAlign: 'center' }}>{stat.matches}</td>
@@ -840,11 +917,11 @@ const GroupDetail = () => {
                                     gap: '0.75rem'
                                 }}>
                                     <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--accent-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-                                        {member.name ? member.name.charAt(0).toUpperCase() : 'U'}
+                                        {stripSenSuffix(member.name).charAt(0).toUpperCase() || 'U'}
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                                         <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                            {currentUser && member.id === currentUser.id ? `${member.name} (Sen)` : member.name}
+                                            {formatPlayerDisplayName(member, currentUserId)}
                                             {isMemberAdmin && <Shield size={14} color="gold" fill="gold" />}
                                             {/* Jersey Number Display / Edit */}
                                             {isEditingJersey ? (
@@ -867,7 +944,7 @@ const GroupDetail = () => {
 
                                     {isAdmin && (
                                         <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
-                                            {currentUser && member.id !== currentUser.id && (
+                                            {currentUserId && String(member.id) !== String(currentUserId) && (
                                                 <button
                                                     onClick={() => handleToggleAdmin(member.id, isMemberAdmin)}
                                                     style={{ background: 'none', border: 'none', color: isMemberAdmin ? 'gold' : 'var(--text-secondary)', cursor: 'pointer' }}
@@ -877,8 +954,8 @@ const GroupDetail = () => {
                                                 </button>
                                             )}
                                             <button
-                                                onClick={() => handleRemoveMember(member.id)}
-                                                style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                                                onClick={() => handleRemoveMember(member)}
+                                                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
                                                 title="Üyeyi Çıkar"
                                             >
                                                 <Trash2 size={16} />
@@ -898,9 +975,9 @@ const GroupDetail = () => {
                                 gap: '0.75rem'
                             }}>
                                 <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-                                    M
+                                    {toTitleCase(guest.name).charAt(0).toUpperCase() || 'M'}
                                 </div>
-                                <span>{guest.name} (Misafir)</span>
+                                <span>{toTitleCase(guest.name)} (Misafir)</span>
                                 <span style={{ marginLeft: '0.5rem' }}>
                                     {isEditingJersey ? (
                                         <input
@@ -929,8 +1006,8 @@ const GroupDetail = () => {
                                             <Link2 size={16} />
                                         </button>
                                         <button
-                                            onClick={() => handleRemoveGuest(guest.id)}
-                                            style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                                            onClick={() => handleRemoveGuest(guest)}
+                                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
                                             title="Misafiri Sil"
                                         >
                                             <Trash2 size={16} />
@@ -995,30 +1072,36 @@ const GroupDetail = () => {
                             </select>
                         </div>
 
+                        {mergeError && (
+                            <div style={{ padding: '0.75rem', marginBottom: '1rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderRadius: 'var(--radius-md)', fontSize: '0.875rem' }}>
+                                {mergeError}
+                            </div>
+                        )}
+
                         <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
                             <button onClick={() => setShowMergeModal(false)} className="btn btn-secondary">İptal</button>
-                            <button onClick={handleMergeGuest} className="btn btn-primary" disabled={!selectedMemberForMerge}>Eşleştir</button>
+                            <button onClick={handleMergeGuest} className="btn btn-primary" disabled={!selectedMemberForMerge || isMerging}>
+                                {isMerging ? 'Eşleştiriliyor...' : 'Eşleştir'}
+                            </button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Match Delete Confirmation Modal */}
+            {/* Confirmation Modal */}
             <ConfirmModal
-                isOpen={deleteModal.isOpen}
-                title={deleteModal.isPlayed ? "Maçı Sil" : "Planlanan Maçı Sil"}
-                message={deleteModal.isPlayed
-                    ? "Bu maçı silmek istediğinize emin misiniz? Maç ve varsa ilişkili tüm istatistikler kalıcı olarak kaldırılacaktır."
-                    : "Bu planlanan maçı silmek istediğinize emin misiniz? Bu işlem geri alınamaz."}
-                confirmText="Evet, Maçı Sil"
-                cancelText="Vazgeç"
-                isDanger={true}
-                isLoading={deleteModal.isLoading}
-                error={deleteModal.error}
-                onConfirm={handleConfirmDeleteMatch}
+                isOpen={confirmModal.isOpen}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                confirmText={confirmModal.confirmText || 'Evet, Onayla'}
+                cancelText={confirmModal.cancelText || 'Vazgeç'}
+                isDanger={confirmModal.isDanger !== false}
+                isLoading={confirmModal.isLoading}
+                error={confirmModal.error}
+                onConfirm={confirmModal.onConfirm}
                 onClose={() => {
-                    if (!deleteModal.isLoading) {
-                        setDeleteModal({ isOpen: false, matchId: null, isPlayed: false, isLoading: false, error: null });
+                    if (!confirmModal.isLoading) {
+                        setConfirmModal(prev => ({ ...prev, isOpen: false, error: null, onConfirm: null }));
                     }
                 }}
             />

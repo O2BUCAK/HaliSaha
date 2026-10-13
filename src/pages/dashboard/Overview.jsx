@@ -5,6 +5,7 @@ import { Trophy, Activity, Calendar } from 'lucide-react';
 import InvitationsList from '../../components/InvitationsList';
 import GroupList from './GroupList';
 import AdSenseBanner from '../../components/AdSenseBanner';
+import { toTitleCase } from '../../utils';
 
 const Overview = () => {
     const { currentUser } = useAuth();
@@ -17,14 +18,14 @@ const Overview = () => {
 
     // Calculate total goals scored by current user
     const totalGoals = myMatches.reduce((sum, match) => {
-        const userStats = match.stats?.[currentUser.uid || currentUser.id];
+        const userStats = match.stats?.[currentUser?.uid || currentUser?.id];
         return sum + (userStats?.goals || 0);
     }, 0);
 
     return (
         <div>
             <div className="mb-8">
-                <h2 style={{ fontSize: '1.8rem', marginBottom: '0.5rem' }}>Hoşgeldin, {currentUser?.name} 👋</h2>
+                <h2 style={{ fontSize: '1.8rem', marginBottom: '0.5rem' }}>Hoşgeldin, {toTitleCase(currentUser?.name)} 👋</h2>
                 <p className="text-gray-600">Halısaha istatistiklerini buradan takip edebilirsin.</p>
             </div>
 

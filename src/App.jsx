@@ -48,6 +48,7 @@ function App() {
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
                   <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
+                  <Route path="/profile/:userId" element={<PrivateRoute><Profile /></PrivateRoute>} />
                   <Route path="/dashboard/*" element={<Dashboard />} />
                 </Routes>
               </main>

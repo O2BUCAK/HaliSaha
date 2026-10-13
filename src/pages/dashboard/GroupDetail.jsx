@@ -6,18 +6,18 @@ import { toTitleCase, stripSenSuffix, formatPlayerDisplayName } from '../../util
 import InviteMember from '../../components/InviteMember';
 import AdSenseBanner from '../../components/AdSenseBanner';
 import ConfirmModal from '../../components/ConfirmModal';
-import { Users, Calendar, Plus, Copy, Check, UserPlus, Trophy, Play, Square, Mail, Trash2, Shield, ShieldAlert, Video, FileText, Save, Hash, Share2, Star, Link2, X, Eraser } from 'lucide-react';
+import { Users, Calendar, Plus, Copy, Check, UserPlus, Trophy, Play, Square, Mail, Trash2, Shield, ShieldAlert, Video, FileText, Save, Hash, Share2, Star, Link2, X, Eraser, RotateCcw } from 'lucide-react';
 
 
 const GroupDetail = () => {
     const { groupId } = useParams();
     const {
-        groups, getGroupMatches, addGuestMember, startSeason, endSeason,
+        groups, getGroupMatches, getDeletedGroupMatches, addGuestMember, startSeason, endSeason,
         getSeasonStats, getAllTimeStats, assignMatchToSeason, removeMember,
         removeGuestMember, addAdmin, removeAdmin, getUsersDetails,
         fetchGroup, sendJoinRequest, getJoinRequests, respondToJoinRequest,
         updateGroupJerseyNumbers, mergeGuestToUser, cleanupGuestDuplicates,
-        deleteMatch
+        deleteMatch, restoreMatch, permanentDeleteMatch
     } = useData();
     const { currentUser } = useAuth();
     const [fetchedGroup, setFetchedGroup] = useState(null);
@@ -47,6 +47,12 @@ const GroupDetail = () => {
     const [statsSortBy, setStatsSortBy] = useState('goals'); // players: goals, assists, matches; gk: saves, cleanSheets, matches
     const [statsSortOrder, setStatsSortOrder] = useState('desc'); // desc, asc
     const [matchSortOrder, setMatchSortOrder] = useState('desc'); // desc (newest), asc (oldest)
+
+    // Match Trash & Recovery State
+    const [undoToast, setUndoToast] = useState(null);
+    const [showTrashSection, setShowTrashSection] = useState(false);
+    const [isRestoringMatch, setIsRestoringMatch] = useState(false);
+    const [showRecoveryGuide, setShowRecoveryGuide] = useState(false);
 
     // Use group from context if available (member), otherwise use fetched group (public)
     const contextGroup = groups.find(g => g.id === groupId);
@@ -227,6 +233,8 @@ const GroupDetail = () => {
             : dateA.localeCompare(dateB);
     });
 
+    const deletedMatches = getDeletedGroupMatches(groupId);
+
     const copyCode = () => {
         navigator.clipboard.writeText(group.joinCode);
         setCopied(true);
@@ -309,15 +317,62 @@ const GroupDetail = () => {
         });
     };
 
+    const handleRestoreMatch = async (matchId) => {
+        setIsRestoringMatch(true);
+        const res = await restoreMatch(matchId);
+        setIsRestoringMatch(false);
+        if (res.success) {
+            setUndoToast(null);
+            setActionSuccessMsg('Maç başarıyla geri yüklendi! İstatistikler ve kadrolar güncellendi.');
+            setTimeout(() => setActionSuccessMsg(''), 4500);
+        } else {
+            setConfirmModal({
+                isOpen: true,
+                title: 'Geri Yükleme Hatası',
+                message: res.error || 'Maç geri yüklenirken bir sorun oluştu.',
+                confirmText: 'Tamam',
+                cancelText: null,
+                isDanger: false,
+                isLoading: false,
+                error: null,
+                onConfirm: () => setConfirmModal(prev => ({ ...prev, isOpen: false }))
+            });
+        }
+    };
+
+    const handlePermanentDeleteMatch = (matchId) => {
+        setConfirmModal({
+            isOpen: true,
+            title: 'Kalıcı Olarak Sil',
+            message: 'Bu maçı çöp kutusundan kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
+            confirmText: 'Evet, Kalıcı Sil',
+            cancelText: 'Vazgeç',
+            isDanger: true,
+            isLoading: false,
+            error: null,
+            onConfirm: async () => {
+                setConfirmModal(prev => ({ ...prev, isLoading: true, error: null }));
+                const result = await permanentDeleteMatch(matchId);
+                if (result.success) {
+                    setConfirmModal({ isOpen: false, title: '', message: '', confirmText: '', cancelText: '', isDanger: true, isLoading: false, error: null, onConfirm: null });
+                    setActionSuccessMsg('Maç kalıcı olarak silindi.');
+                    setTimeout(() => setActionSuccessMsg(''), 3000);
+                } else {
+                    setConfirmModal(prev => ({ ...prev, isLoading: false, error: result.error || 'Silinirken hata oluştu.' }));
+                }
+            }
+        });
+    };
+
     const handleDeleteMatch = (matchId, isPlayed = false) => {
         if (!isAdmin) return;
         setConfirmModal({
             isOpen: true,
             title: isPlayed ? 'Maçı Sil' : 'Planlanan Maçı Sil',
             message: isPlayed
-                ? 'Bu maçı silmek istediğinize emin misiniz? Maç ve varsa ilişkili tüm istatistikler kalıcı olarak kaldırılacaktır.'
-                : 'Bu planlanan maçı silmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
-            confirmText: 'Evet, Maçı Sil',
+                ? 'Bu maçı silmek istediğinize emin misiniz? Maç Çöp Kutusu\'na kaldırılacaktır. Yanlışlıkla silmeniz durumunda dilediğiniz an Çöp Kutusu\'ndan tek tıkla geri yükleyebilirsiniz.'
+                : 'Bu planlanan maçı silmek istediğinize emin misiniz? Maç Çöp Kutusu\'na kaldırılacaktır.',
+            confirmText: 'Evet, Sil (Çöp Kutusuna Taşı)',
             cancelText: 'Vazgeç',
             isDanger: true,
             isLoading: false,
@@ -327,8 +382,9 @@ const GroupDetail = () => {
                 const result = await deleteMatch(matchId);
                 if (result.success) {
                     setConfirmModal({ isOpen: false, title: '', message: '', confirmText: '', cancelText: '', isDanger: true, isLoading: false, error: null, onConfirm: null });
-                    setActionSuccessMsg('Maç başarıyla silindi.');
-                    setTimeout(() => setActionSuccessMsg(''), 4000);
+                    setUndoToast({ matchId, id: matchId, timestamp: Date.now() });
+                    setActionSuccessMsg('Maç silindi ve Çöp Kutusu\'na taşındı. Aşağıdaki "Geri Al" butonuyla anında geri alabilirsiniz.');
+                    setTimeout(() => setActionSuccessMsg(''), 6000);
                 } else {
                     setConfirmModal(prev => ({ ...prev, isLoading: false, error: result.error || 'Maç silinirken hata oluştu.' }));
                 }
@@ -683,7 +739,24 @@ const GroupDetail = () => {
                                                 const member = memberDetails.find(m => m.id === stat.id);
                                                 // Prefer member name (from live profile), fallback to stat name (historical/guest)
                                                 const rawName = member ? (member.name || member.nickname) : stat.name;
-                                                return formatPlayerDisplayName(rawName, currentUserId, stat.id);
+                                                const formatted = formatPlayerDisplayName(rawName, currentUserId, stat.id);
+                                                return (
+                                                    <Link
+                                                        to={`/profile/${stat.id}`}
+                                                        style={{
+                                                            color: 'var(--text-primary)',
+                                                            textDecoration: 'none',
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '4px',
+                                                            fontWeight: '500'
+                                                        }}
+                                                        className="hover:underline"
+                                                        title={`${formatted} profilini ve performans trendlerini görüntüle`}
+                                                    >
+                                                        {formatted}
+                                                    </Link>
+                                                );
                                             })()}
                                         </td>
                                         <td style={{ padding: '0.75rem', textAlign: 'center' }}>{stat.matches}</td>
@@ -745,18 +818,183 @@ const GroupDetail = () => {
                             <Check size={18} /> {actionSuccessMsg}
                         </div>
                     )}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                         <h3 style={{ fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
                             <Calendar size={20} /> Maçlar
                         </h3>
-                        <button
-                            onClick={() => setMatchSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
-                            className="btn btn-secondary"
-                            style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
-                        >
-                            {matchSortOrder === 'desc' ? '↓ En Yeni' : '↑ En Eski'}
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            {isAdmin && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowTrashSection(prev => !prev)}
+                                    className="btn btn-secondary"
+                                    style={{
+                                        fontSize: '0.8rem',
+                                        padding: '0.3rem 0.65rem',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '0.35rem',
+                                        borderColor: showTrashSection ? 'var(--accent-primary)' : (deletedMatches.length > 0 ? 'rgba(239, 68, 68, 0.4)' : 'var(--border-color)'),
+                                        color: showTrashSection ? 'var(--accent-primary)' : (deletedMatches.length > 0 ? '#fca5a5' : 'var(--text-secondary)')
+                                    }}
+                                    title="Silinen maçları ve çöp kutusunu görüntüle"
+                                >
+                                    <Trash2 size={14} />
+                                    <span>Çöp Kutusu</span>
+                                    {deletedMatches.length > 0 && (
+                                        <span style={{
+                                            background: '#ef4444',
+                                            color: '#fff',
+                                            borderRadius: '10px',
+                                            padding: '1px 6px',
+                                            fontSize: '0.7rem',
+                                            fontWeight: 'bold'
+                                        }}>
+                                            {deletedMatches.length}
+                                        </span>
+                                    )}
+                                </button>
+                            )}
+                            <button
+                                onClick={() => setMatchSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
+                                className="btn btn-secondary"
+                                style={{ fontSize: '0.8rem', padding: '0.3rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                            >
+                                {matchSortOrder === 'desc' ? '↓ En Yeni' : '↑ En Eski'}
+                            </button>
+                        </div>
                     </div>
+
+                    {/* Trash & Recovery Section */}
+                    {showTrashSection && (
+                        <div style={{
+                            marginBottom: '1.5rem',
+                            padding: '1.25rem',
+                            background: 'rgba(239, 68, 68, 0.05)',
+                            border: '1px solid rgba(239, 68, 68, 0.25)',
+                            borderRadius: 'var(--radius-md)'
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                <div>
+                                    <h4 style={{ margin: 0, fontSize: '1rem', color: '#fca5a5', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                        <Trash2 size={16} /> Silinen Maçlar (Çöp Kutusu)
+                                    </h4>
+                                    <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                        Yanlışlıkla sildiğiniz maçları tek tıkla geri yükleyebilir, puan ve istatistikleri eski haline getirebilirsiniz.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowRecoveryGuide(!showRecoveryGuide)}
+                                    className="btn btn-secondary"
+                                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.55rem', color: 'var(--accent-primary)' }}
+                                >
+                                    {showRecoveryGuide ? 'Rehberi Gizle' : '💡 Eski Maçı Nasıl Kurtarırım?'}
+                                </button>
+                            </div>
+
+                            {/* Recovery Guide Banner */}
+                            {showRecoveryGuide && (
+                                <div style={{
+                                    marginBottom: '1rem',
+                                    padding: '0.75rem 1rem',
+                                    background: 'rgba(255, 255, 255, 0.03)',
+                                    border: '1px dashed var(--border-color)',
+                                    borderRadius: '6px',
+                                    fontSize: '0.8rem',
+                                    color: 'var(--text-secondary)',
+                                    lineHeight: '1.5'
+                                }}>
+                                    <strong style={{ color: 'var(--text-primary)', display: 'block', marginBottom: '0.25rem' }}>
+                                        📌 Daha önce kalıcı silinmiş eski bir maçı geri getirme:
+                                    </strong>
+                                    Eğer maç bu çöp kutusu özelliği eklenmeden önce kalıcı silindiyse:
+                                    <ol style={{ margin: '0.4rem 0 0.4rem 1.25rem', padding: 0 }}>
+                                        <li><strong>+ Maç Oluştur</strong> butonu ile aynı tarih ve saatte yeni bir maç açın.</li>
+                                        <li>Oyuncuları <strong>A Takımı</strong> ve <strong>B Takımı</strong> olarak ekleyin.</li>
+                                        <li><strong>Maçı Tamamla</strong> diyerek skoru, golleri ve asistleri girip kaydedin.</li>
+                                    </ol>
+                                    Sistem tüm oyuncu profillerini, gol krallığını ve performans grafiklerini otomatik olarak eksiksiz yeniden hesaplayacaktır.
+                                </div>
+                            )}
+
+                            {deletedMatches.length === 0 ? (
+                                <div style={{ padding: '1.25rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                                    Çöp kutusunda silinmiş maç bulunmuyor.
+                                </div>
+                            ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                    {deletedMatches.map(dm => (
+                                        <div
+                                            key={dm.id}
+                                            style={{
+                                                padding: '0.75rem 1rem',
+                                                background: 'rgba(20, 24, 33, 0.85)',
+                                                border: '1px solid rgba(255, 255, 255, 0.1)',
+                                                borderRadius: '6px',
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center',
+                                                flexWrap: 'wrap',
+                                                gap: '0.75rem'
+                                            }}
+                                        >
+                                            <div>
+                                                <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>
+                                                    {dm.venue || 'Halı Saha Maçı'} {dm.date ? `(${dm.date})` : ''}
+                                                </div>
+                                                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                                    {dm.score ? (
+                                                        <span style={{ color: 'var(--accent-primary)', fontWeight: 'bold' }}>
+                                                            Skor: {dm.score.a} - {dm.score.b}
+                                                        </span>
+                                                    ) : 'Planlanan Maç'}
+                                                    {dm.deletedAt && ` • Silinme: ${new Date(dm.deletedAt).toLocaleDateString('tr-TR')} ${new Date(dm.deletedAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`}
+                                                </div>
+                                            </div>
+
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRestoreMatch(dm.id)}
+                                                    disabled={isRestoringMatch}
+                                                    className="btn btn-primary"
+                                                    style={{
+                                                        padding: '0.35rem 0.75rem',
+                                                        fontSize: '0.8rem',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px'
+                                                    }}
+                                                    title="Maçı geri yükle"
+                                                >
+                                                    <RotateCcw size={14} />
+                                                    <span>Geri Yükle</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handlePermanentDeleteMatch(dm.id)}
+                                                    className="btn"
+                                                    style={{
+                                                        padding: '0.35rem 0.6rem',
+                                                        fontSize: '0.8rem',
+                                                        background: 'rgba(239, 68, 68, 0.1)',
+                                                        color: '#ef4444',
+                                                        border: '1px solid rgba(239, 68, 68, 0.25)',
+                                                        borderRadius: 'var(--radius-md)',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                    title="Kalıcı olarak sil"
+                                                >
+                                                    <Trash2 size={13} /> Kalıcı Sil
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                         {displayedMatches.length > 0 ? (
@@ -921,7 +1159,14 @@ const GroupDetail = () => {
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                                         <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                            {formatPlayerDisplayName(member, currentUserId)}
+                                            <Link
+                                                to={`/profile/${member.id}`}
+                                                style={{ color: 'var(--text-primary)', textDecoration: 'none', fontWeight: '500' }}
+                                                className="hover:underline"
+                                                title="Oyuncu profilini ve performans trendlerini görüntüle"
+                                            >
+                                                {formatPlayerDisplayName(member, currentUserId)}
+                                            </Link>
                                             {isMemberAdmin && <Shield size={14} color="gold" fill="gold" />}
                                             {/* Jersey Number Display / Edit */}
                                             {isEditingJersey ? (
@@ -977,7 +1222,14 @@ const GroupDetail = () => {
                                 <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
                                     {toTitleCase(guest.name).charAt(0).toUpperCase() || 'M'}
                                 </div>
-                                <span>{toTitleCase(guest.name)} (Misafir)</span>
+                                <Link
+                                    to={`/profile/${guest.id}`}
+                                    style={{ color: 'var(--text-primary)', textDecoration: 'none', fontWeight: '500' }}
+                                    className="hover:underline"
+                                    title="Misafir oyuncu kartı ve maç istatistiklerini görüntüle"
+                                >
+                                    <span>{toTitleCase(guest.name)} (Misafir)</span>
+                                </Link>
                                 <span style={{ marginLeft: '0.5rem' }}>
                                     {isEditingJersey ? (
                                         <input
@@ -1085,6 +1337,46 @@ const GroupDetail = () => {
                             </button>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* Quick Undo Floating Notification Banner */}
+            {undoToast && (
+                <div style={{
+                    position: 'fixed',
+                    bottom: '24px',
+                    right: '24px',
+                    zIndex: 9999,
+                    background: 'rgba(20, 24, 33, 0.98)',
+                    border: '1px solid var(--accent-primary)',
+                    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.7)',
+                    borderRadius: '8px',
+                    padding: '0.85rem 1.25rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '1rem',
+                    color: '#fff',
+                    maxWidth: '420px'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Trash2 size={18} color="#ef4444" />
+                        <span style={{ fontSize: '0.85rem' }}>Maç silindi (Çöp Kutusu'na alındı).</span>
+                    </div>
+                    <button
+                        onClick={() => handleRestoreMatch(undoToast.matchId)}
+                        disabled={isRestoringMatch}
+                        className="btn btn-primary"
+                        style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                    >
+                        <RotateCcw size={14} /> {isRestoringMatch ? 'Yükleniyor...' : 'Geri Al'}
+                    </button>
+                    <button
+                        onClick={() => setUndoToast(null)}
+                        style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '2px' }}
+                        title="Kapat"
+                    >
+                        <X size={16} />
+                    </button>
                 </div>
             )}
 

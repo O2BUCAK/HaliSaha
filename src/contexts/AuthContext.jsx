@@ -35,12 +35,26 @@ export const AuthProvider = ({ children }) => {
                     const userDoc = await getDoc(userDocRef);
 
                     if (userDoc.exists()) {
-                        setCurrentUser({ ...user, ...userDoc.data() });
+                        const rawData = userDoc.data();
+                        const formattedName = toTitleCase(rawData.name || user.displayName || 'Kullanıcı');
+                        const formattedNickname = rawData.nickname ? toTitleCase(rawData.nickname) : formattedName;
+                        setCurrentUser({
+                            ...user,
+                            ...rawData,
+                            name: formattedName,
+                            nickname: formattedNickname
+                        });
+                        // Automatically heal the user document if first letters were lowercase
+                        if (rawData.name && rawData.name !== formattedName) {
+                            updateDoc(userDocRef, { name: formattedName }).catch(() => {});
+                        }
                     } else {
-                        setCurrentUser(user);
+                        const formattedName = toTitleCase(user.displayName || 'Kullanıcı');
+                        setCurrentUser({ ...user, name: formattedName, nickname: formattedName });
                     }
                 } catch {
-                    setCurrentUser(user);
+                    const formattedName = toTitleCase(user.displayName || 'Kullanıcı');
+                    setCurrentUser({ ...user, name: formattedName, nickname: formattedName });
                 }
             } else {
                 setCurrentUser(null);
@@ -193,6 +207,7 @@ export const AuthProvider = ({ children }) => {
             if (data.bio !== undefined) safeData.bio = sanitizeInput(data.bio);
             if (data.socialLinks) safeData.socialLinks = data.socialLinks;
             if (data.photoURL) safeData.photoURL = data.photoURL;
+            if (data.showPerformanceChart !== undefined) safeData.showPerformanceChart = Boolean(data.showPerformanceChart);
 
             // Block field tampering: Prevent client from modifying id, email, role, or createdAt
             delete safeData.id;

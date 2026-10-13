@@ -4,6 +4,7 @@ import { db } from '../firebase';
 import {
     collection,
     addDoc,
+    setDoc,
     query,
     where,
     onSnapshot,
@@ -626,7 +627,17 @@ export const DataProvider = ({ children }) => {
         try {
             const userPromises = userIds.map(id => getDoc(doc(db, 'users', id)));
             const userSnapshots = await Promise.all(userPromises);
-            return userSnapshots.map(snap => ({ id: snap.id, ...snap.data() }));
+            return userSnapshots.map(snap => {
+                const data = snap.data() || {};
+                const name = toTitleCase(stripSenSuffix(data.name || data.displayName || 'Kullanıcı'));
+                const nickname = data.nickname ? toTitleCase(stripSenSuffix(data.nickname)) : name;
+                return {
+                    id: snap.id,
+                    ...data,
+                    name,
+                    nickname
+                };
+            });
         } catch (error) {
             console.error("Error fetching user details:", error);
             return [];
@@ -850,7 +861,7 @@ export const DataProvider = ({ children }) => {
         }
     };
 
-    const createMatch = async (groupId, date, venue, teamA, teamB, teamAName = 'Takım A', teamBName = 'Takım B') => {
+    const createMatch = async (groupId, date, venue, teamA, teamB, teamAName = 'Takım A', teamBName = 'Takım B', teamAColor = '#2563eb', teamBColor = '#dc2626') => {
         const group = groups.find(g => g.id === groupId);
         const seasonId = group?.activeSeasonId || null;
 
@@ -872,6 +883,8 @@ export const DataProvider = ({ children }) => {
             teamB: cleanTeamB,
             teamAName,
             teamBName,
+            teamAColor,
+            teamBColor,
             status: 'scheduled',
             score: null,
             ratings: {},
@@ -881,13 +894,15 @@ export const DataProvider = ({ children }) => {
 
         try {
             const docRef = await addDoc(collection(db, 'matches'), newMatch);
-            return { ...newMatch, id: docRef.id };
+            const created = { ...newMatch, id: docRef.id };
+            setMatches(prev => [created, ...prev]);
+            return created;
         } catch (error) {
             console.error("Error creating match:", error);
         }
     };
 
-    const finishMatch = async (matchId, scoreA, scoreB, playerStats, teamA, teamB, teamAName, teamBName, videoUrls = [], matchSummary = '') => {
+    const finishMatch = async (matchId, scoreA, scoreB, playerStats, teamA, teamB, teamAName, teamBName, videoUrls = [], matchSummary = '', teamAColor = '#2563eb', teamBColor = '#dc2626') => {
         try {
             const cleanTeamA = (teamA || []).map(p => ({
                 ...p,
@@ -899,7 +914,7 @@ export const DataProvider = ({ children }) => {
             }));
 
             const matchRef = doc(db, 'matches', matchId);
-            await updateDoc(matchRef, {
+            const updatePayload = {
                 status: 'played',
                 score: { a: scoreA, b: scoreB },
                 stats: playerStats,
@@ -907,9 +922,15 @@ export const DataProvider = ({ children }) => {
                 teamB: cleanTeamB,
                 teamAName,
                 teamBName,
+                teamAColor,
+                teamBColor,
                 videoUrls,
                 matchSummary
-            });
+            };
+
+            await updateDoc(matchRef, updatePayload);
+
+            setMatches(prev => prev.map(m => m.id === matchId ? { ...m, ...updatePayload } : m));
         } catch (error) {
             console.error("Error finishing match:", error);
         }
@@ -925,7 +946,7 @@ export const DataProvider = ({ children }) => {
                 setMatches(prevMatches => prevMatches.filter(m => m.id !== matchId));
                 return { success: true };
             }
-            const matchData = matchSnap.data();
+            const matchData = { id: matchSnap.id, ...matchSnap.data() };
             
             // Check authorization: user must be admin or creator of the group, or creator of the match
             const currentUserId = String(currentUser.uid || currentUser.id);
@@ -951,12 +972,96 @@ export const DataProvider = ({ children }) => {
                 return { success: false, error: 'Bu maçı silme yetkiniz yok.' };
             }
 
-            await deleteDoc(matchRef);
-            setMatches(prevMatches => prevMatches.filter(m => m.id !== matchId));
-            return { success: true };
+            // Save to local emergency backup trash in localStorage
+            try {
+                const existingTrash = JSON.parse(localStorage.getItem('halisaha_deleted_matches') || '[]');
+                const updatedTrash = [
+                    { ...matchData, deletedAt: new Date().toISOString() },
+                    ...existingTrash.filter(m => m.id !== matchId)
+                ].slice(0, 50);
+                localStorage.setItem('halisaha_deleted_matches', JSON.stringify(updatedTrash));
+            } catch (err) {
+                console.warn("Local trash write warning:", err);
+            }
+
+            // Soft-delete in Firestore so it can be restored completely at any time
+            await updateDoc(matchRef, {
+                isDeleted: true,
+                deletedAt: new Date().toISOString(),
+                deletedBy: currentUserId
+            });
+
+            // Update in-memory state
+            setMatches(prevMatches => prevMatches.map(m => m.id === matchId ? { ...m, isDeleted: true, deletedAt: new Date().toISOString() } : m));
+
+            return { success: true, matchData };
         } catch (error) {
             console.error("Error deleting match:", error);
             return { success: false, error: error.message || 'Maç silinirken hata oluştu.' };
+        }
+    };
+
+    const restoreMatch = async (matchId) => {
+        try {
+            if (!currentUser) return { success: false, error: 'Giriş yapılmalıdır.' };
+            const matchRef = doc(db, 'matches', matchId);
+            const matchSnap = await getDoc(matchRef);
+
+            // Case 1: Document still exists in Firestore marked as isDeleted: true
+            if (matchSnap.exists()) {
+                await updateDoc(matchRef, {
+                    isDeleted: false,
+                    restoredAt: new Date().toISOString(),
+                    restoredBy: String(currentUser.uid || currentUser.id)
+                });
+                setMatches(prevMatches => prevMatches.map(m => m.id === matchId ? { ...m, isDeleted: false } : m));
+                return { success: true };
+            }
+
+            // Case 2: Document was hard-deleted, attempt recovery from local emergency backup trash
+            let cachedMatch = null;
+            try {
+                const trash = JSON.parse(localStorage.getItem('halisaha_deleted_matches') || '[]');
+                cachedMatch = trash.find(m => m.id === matchId);
+            } catch (e) {
+                console.warn("Could not read local backup trash:", e);
+            }
+
+            if (cachedMatch) {
+                const { id: _ignore, ...restoreData } = cachedMatch;
+                restoreData.isDeleted = false;
+                restoreData.restoredAt = new Date().toISOString();
+                restoreData.restoredBy = String(currentUser.uid || currentUser.id);
+
+                await setDoc(matchRef, restoreData);
+                setMatches(prev => [...prev.filter(m => m.id !== matchId), { id: matchId, ...restoreData }]);
+                return { success: true };
+            }
+
+            return { success: false, error: 'Kurtarılacak maç verisi bulunamadı.' };
+        } catch (error) {
+            console.error("Error restoring match:", error);
+            return { success: false, error: error.message || 'Maç geri yüklenirken hata oluştu.' };
+        }
+    };
+
+    const permanentDeleteMatch = async (matchId) => {
+        try {
+            if (!currentUser) return { success: false, error: 'Giriş yapılmalıdır.' };
+            const matchRef = doc(db, 'matches', matchId);
+            await deleteDoc(matchRef);
+            setMatches(prevMatches => prevMatches.filter(m => m.id !== matchId));
+
+            try {
+                const trash = JSON.parse(localStorage.getItem('halisaha_deleted_matches') || '[]');
+                localStorage.setItem('halisaha_deleted_matches', JSON.stringify(trash.filter(m => m.id !== matchId)));
+            } catch (e) {
+                console.warn(e);
+            }
+            return { success: true };
+        } catch (error) {
+            console.error("Error permanently deleting match:", error);
+            return { success: false, error: error.message || 'Kalıcı silme sırasında hata oluştu.' };
         }
     };
 
@@ -1011,7 +1116,7 @@ export const DataProvider = ({ children }) => {
         }
     };
 
-    const updateMatchTeams = async (matchId, teamA, teamB) => {
+    const updateMatchTeams = async (matchId, teamA, teamB, options = {}) => {
         try {
             const cleanTeamA = (teamA || []).map(p => ({
                 ...p,
@@ -1023,10 +1128,19 @@ export const DataProvider = ({ children }) => {
             }));
 
             const matchRef = doc(db, 'matches', matchId);
-            await updateDoc(matchRef, {
+            const updatePayload = {
                 teamA: cleanTeamA,
                 teamB: cleanTeamB
-            });
+            };
+
+            if (options.teamAColor) updatePayload.teamAColor = options.teamAColor;
+            if (options.teamBColor) updatePayload.teamBColor = options.teamBColor;
+            if (options.teamAName) updatePayload.teamAName = options.teamAName;
+            if (options.teamBName) updatePayload.teamBName = options.teamBName;
+
+            await updateDoc(matchRef, updatePayload);
+
+            setMatches(prev => prev.map(m => m.id === matchId ? { ...m, ...updatePayload } : m));
             return { success: true };
         } catch (error) {
             console.error("Error updating match teams:", error);
@@ -1172,7 +1286,8 @@ export const DataProvider = ({ children }) => {
         const seasonMatches = matches.filter(m =>
             m.groupId === groupId &&
             m.seasonId === seasonId &&
-            m.status === 'played'
+            m.status === 'played' &&
+            !m.isDeleted
         );
         return calculateStats(seasonMatches);
     };
@@ -1180,7 +1295,8 @@ export const DataProvider = ({ children }) => {
     const getAllTimeStats = (groupId) => {
         const groupMatches = matches.filter(m =>
             m.groupId === groupId &&
-            m.status === 'played'
+            m.status === 'played' &&
+            !m.isDeleted
         );
         return calculateStats(groupMatches);
     };
@@ -1190,7 +1306,28 @@ export const DataProvider = ({ children }) => {
     };
 
     const getGroupMatches = (groupId) => {
-        return matches.filter(m => m.groupId === groupId);
+        return matches.filter(m => m.groupId === groupId && !m.isDeleted);
+    };
+
+    const getDeletedGroupMatches = (groupId) => {
+        // Collect from active state matches with isDeleted: true
+        const stateDeleted = matches.filter(m => m.groupId === groupId && m.isDeleted === true);
+        const stateDeletedIds = new Set(stateDeleted.map(m => m.id));
+
+        // Also check local emergency backup trash for matches of this group not in state
+        let localDeleted = [];
+        try {
+            const trash = JSON.parse(localStorage.getItem('halisaha_deleted_matches') || '[]');
+            localDeleted = trash.filter(m => m.groupId === groupId && !stateDeletedIds.has(m.id));
+        } catch (e) {
+            console.warn(e);
+        }
+
+        return [...stateDeleted, ...localDeleted].sort((a, b) => {
+            const dateA = a.deletedAt || a.date || '';
+            const dateB = b.deletedAt || b.date || '';
+            return String(dateB).localeCompare(String(dateA));
+        });
     };
 
     const value = {
@@ -1213,6 +1350,8 @@ export const DataProvider = ({ children }) => {
         createMatch,
         finishMatch,
         deleteMatch,
+        restoreMatch,
+        permanentDeleteMatch,
         revertMatchToScheduled,
         assignMatchToSeason,
         startSeason,
@@ -1221,6 +1360,7 @@ export const DataProvider = ({ children }) => {
         getAllTimeStats,
         getMyGroups,
         getGroupMatches,
+        getDeletedGroupMatches,
         fetchGroup,
         fetchMatch,
         sendJoinRequest,

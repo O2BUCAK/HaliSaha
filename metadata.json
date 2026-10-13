@@ -1,0 +1,7 @@
+{
+  "name": "Halı Saha İstatistik Platformu",
+  "description": "Arkadaş grupları için dijital halı saha ligi, gol/asist istatistikleri, oyuncu profilleri ve performans trend analizleri.",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

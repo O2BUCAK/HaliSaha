@@ -14,7 +14,7 @@ const Overview = () => {
 
     // Calculate user statistics
     const myGroupIds = myGroups.map(g => g.id);
-    const myMatches = matches.filter(m => myGroupIds.includes(m.groupId) && m.status === 'played');
+    const myMatches = matches.filter(m => myGroupIds.includes(m.groupId) && m.status === 'played' && !m.isDeleted);
 
     // Calculate total goals scored by current user
     const totalGoals = myMatches.reduce((sum, match) => {

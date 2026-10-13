@@ -73,6 +73,8 @@ const MatchDetail = () => {
     const [teamB, setTeamB] = useState(match?.teamB || []);
     const [teamAName, setTeamAName] = useState(match?.teamAName || 'Takım A');
     const [teamBName, setTeamBName] = useState(match?.teamBName || 'Takım B');
+    const [teamAColor, setTeamAColor] = useState(match?.teamAColor || '#2563eb');
+    const [teamBColor, setTeamBColor] = useState(match?.teamBColor || '#dc2626');
 
     // Media & Content State
     const [videoUrls, setVideoUrls] = useState(match?.videoUrls || (match?.videoUrl ? [match.videoUrl] : []));
@@ -113,6 +115,8 @@ const MatchDetail = () => {
             setTeamB(cleanB);
             setTeamAName(match.teamAName || 'Takım A');
             setTeamBName(match.teamBName || 'Takım B');
+            setTeamAColor(match.teamAColor || '#2563eb');
+            setTeamBColor(match.teamBColor || '#dc2626');
             setVideoUrls(match.videoUrls || (match.videoUrl ? [match.videoUrl] : []));
             setMatchSummary(match.matchSummary || '');
             setPlayerStats(match.stats || {});
@@ -212,19 +216,28 @@ const MatchDetail = () => {
         const parsedB = parseInt(scoreB, 10);
         const finalScoreA = isNaN(parsedA) ? 0 : parsedA;
         const finalScoreB = isNaN(parsedB) ? 0 : parsedB;
-        finishMatch(matchId, finalScoreA, finalScoreB, playerStats, teamA, teamB, teamAName, teamBName, videoUrls.filter(url => url.trim() !== ''), matchSummary);
+        finishMatch(matchId, finalScoreA, finalScoreB, playerStats, teamA, teamB, teamAName, teamBName, videoUrls.filter(url => url.trim() !== ''), matchSummary, teamAColor, teamBColor);
         setIsEditing(false);
     };
 
-    const handleTacticalSave = async (newTeamA, newTeamB) => {
+    const handleTacticalSave = async (newTeamA, newTeamB, colors = {}) => {
         const cleanA = (newTeamA || []).map(p => ({ ...p, name: toTitleCase(stripSenSuffix(p.name)) }));
         const cleanB = (newTeamB || []).map(p => ({ ...p, name: toTitleCase(stripSenSuffix(p.name)) }));
         setTeamA(cleanA);
         setTeamB(cleanB);
+        const newColorA = colors?.teamAColor || teamAColor;
+        const newColorB = colors?.teamBColor || teamBColor;
+        if (colors?.teamAColor) setTeamAColor(colors.teamAColor);
+        if (colors?.teamBColor) setTeamBColor(colors.teamBColor);
         // Persist immediate changes for tactical board
-        const result = await updateMatchTeams(matchId, cleanA, cleanB);
+        const result = await updateMatchTeams(matchId, cleanA, cleanB, {
+            teamAColor: newColorA,
+            teamBColor: newColorB,
+            teamAName,
+            teamBName
+        });
         if (result.success) {
-            setToast({ type: 'success', message: 'Taktik ve pozisyonlar kaydedildi!' });
+            setToast({ type: 'success', message: 'Taktik, dizilim ve takım renkleri kaydedildi!' });
             setTimeout(() => setToast(null), 3000);
         } else {
             setToast({ type: 'error', message: 'Kaydedilirken hata oluştu.' });
@@ -285,9 +298,9 @@ const MatchDetail = () => {
             type: 'delete',
             title: isPlayedOrHasScore ? 'Maçı Sil' : 'Planlanan Maçı Sil',
             message: isPlayedOrHasScore
-                ? 'Bu maçı silmek istediğinize emin misiniz? Maç ve varsa ilişkili istatistikler kalıcı olarak silinecektir.'
-                : 'Bu planlanan maçı silmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
-            confirmText: 'Evet, Maçı Sil',
+                ? 'Bu maçı silmek istediğinize emin misiniz? Maç Çöp Kutusu\'na kaldırılacak ve grup sayfasındaki Çöp Kutusu\'ndan dilediğiniz an tek tıkla geri yükleyebileceksiniz.'
+                : 'Bu planlanan maçı silmek istediğinize emin misiniz? Maç Çöp Kutusu\'na kaldırılacaktır.',
+            confirmText: 'Evet, Sil (Çöp Kutusuna Taşı)',
             isDanger: true,
             isLoading: false,
             error: null
@@ -463,14 +476,30 @@ const MatchDetail = () => {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2rem', flexWrap: 'wrap' }}>
                     <div style={{ textAlign: 'center', flex: 1 }}>
                         {isEditing ? (
-                            <input
-                                type="text"
-                                value={teamAName}
-                                onChange={(e) => setTeamAName(e.target.value)}
-                                style={{ fontSize: '1.5rem', marginBottom: '1rem', color: 'var(--accent-primary)', textAlign: 'center', width: '100%', background: 'transparent', border: '1px solid var(--border-color)', borderRadius: '4px' }}
-                            />
+                            <>
+                                <input
+                                    type="text"
+                                    value={teamAName}
+                                    onChange={(e) => setTeamAName(e.target.value)}
+                                    style={{ fontSize: '1.5rem', marginBottom: '0.5rem', color: teamAColor || 'var(--accent-primary)', textAlign: 'center', width: '100%', background: 'transparent', border: '1px solid var(--border-color)', borderRadius: '4px' }}
+                                />
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', marginBottom: '0.75rem' }}>
+                                    <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Forma:</label>
+                                    <input
+                                        type="color"
+                                        value={teamAColor}
+                                        onChange={(e) => setTeamAColor(e.target.value)}
+                                        title={`${teamAName} Forma Rengi`}
+                                        style={{ width: '28px', height: '24px', padding: 0, border: '1px solid var(--border-color)', borderRadius: '4px', cursor: 'pointer', background: 'transparent' }}
+                                    />
+                                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{teamAColor}</span>
+                                </div>
+                            </>
                         ) : (
-                            <h3 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: 'var(--accent-primary)' }}>{teamAName}</h3>
+                            <h3 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: teamAColor || 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                                <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: teamAColor || '#2563eb', border: '1.5px solid rgba(255,255,255,0.7)', display: 'inline-block' }} />
+                                {teamAName}
+                            </h3>
                         )}
                         {isEditing ? (
                             <input
@@ -488,14 +517,30 @@ const MatchDetail = () => {
 
                     <div style={{ textAlign: 'center', flex: 1 }}>
                         {isEditing ? (
-                            <input
-                                type="text"
-                                value={teamBName}
-                                onChange={(e) => setTeamBName(e.target.value)}
-                                style={{ fontSize: '1.5rem', marginBottom: '1rem', color: 'var(--accent-secondary)', textAlign: 'center', width: '100%', background: 'transparent', border: '1px solid var(--border-color)', borderRadius: '4px' }}
-                            />
+                            <>
+                                <input
+                                    type="text"
+                                    value={teamBName}
+                                    onChange={(e) => setTeamBName(e.target.value)}
+                                    style={{ fontSize: '1.5rem', marginBottom: '0.5rem', color: teamBColor || 'var(--accent-secondary)', textAlign: 'center', width: '100%', background: 'transparent', border: '1px solid var(--border-color)', borderRadius: '4px' }}
+                                />
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', marginBottom: '0.75rem' }}>
+                                    <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Forma:</label>
+                                    <input
+                                        type="color"
+                                        value={teamBColor}
+                                        onChange={(e) => setTeamBColor(e.target.value)}
+                                        title={`${teamBName} Forma Rengi`}
+                                        style={{ width: '28px', height: '24px', padding: 0, border: '1px solid var(--border-color)', borderRadius: '4px', cursor: 'pointer', background: 'transparent' }}
+                                    />
+                                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{teamBColor}</span>
+                                </div>
+                            </>
                         ) : (
-                            <h3 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: 'var(--accent-secondary)' }}>{teamBName}</h3>
+                            <h3 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: teamBColor || 'var(--accent-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                                <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: teamBColor || '#dc2626', border: '1.5px solid rgba(255,255,255,0.7)', display: 'inline-block' }} />
+                                {teamBName}
+                            </h3>
                         )}
                         {isEditing ? (
                             <input
@@ -545,7 +590,7 @@ const MatchDetail = () => {
 
             {/* Tactical Board */}
             <div style={{ marginBottom: '2rem' }}>
-                <TacticalBoard match={{ teamA, teamB }} group={group} onSave={isAdmin ? handleTacticalSave : undefined} readOnly={!isAdmin} />
+                <TacticalBoard match={{ teamA, teamB, teamAName: teamAName || match?.teamAName || 'Takım A', teamBName: teamBName || match?.teamBName || 'Takım B', teamAColor: teamAColor || match?.teamAColor || '#2563eb', teamBColor: teamBColor || match?.teamBColor || '#dc2626' }} group={group} onSave={isAdmin ? handleTacticalSave : undefined} readOnly={!isAdmin} />
             </div>
 
             {/* Squad Selection (Only visible when editing) */}
@@ -578,9 +623,10 @@ const MatchDetail = () => {
                                             style={{
                                                 padding: '0.25rem 0.5rem',
                                                 borderRadius: '4px',
-                                                background: inA ? 'var(--accent-primary)' : 'rgba(255,255,255,0.1)',
-                                                color: inA ? '#000' : 'inherit',
-                                                fontSize: '0.75rem'
+                                                background: inA ? (teamAColor || 'var(--accent-primary)') : 'rgba(255,255,255,0.1)',
+                                                color: inA ? '#fff' : 'inherit',
+                                                fontSize: '0.75rem',
+                                                fontWeight: inA ? 'bold' : 'normal'
                                             }}
                                         >
                                             A
@@ -590,9 +636,10 @@ const MatchDetail = () => {
                                             style={{
                                                 padding: '0.25rem 0.5rem',
                                                 borderRadius: '4px',
-                                                background: inB ? 'var(--accent-secondary)' : 'rgba(255,255,255,0.1)',
-                                                color: inB ? '#000' : 'inherit',
-                                                fontSize: '0.75rem'
+                                                background: inB ? (teamBColor || 'var(--accent-secondary)') : 'rgba(255,255,255,0.1)',
+                                                color: inB ? '#fff' : 'inherit',
+                                                fontSize: '0.75rem',
+                                                fontWeight: inB ? 'bold' : 'normal'
                                             }}
                                         >
                                             B
@@ -629,14 +676,29 @@ const MatchDetail = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
                 {/* Team A Stats */}
                 <div className="card">
-                    <h3 style={{ color: 'var(--accent-primary)', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>{teamAName} İstatistikleri</h3>
+                    <h3 style={{ color: teamAColor || 'var(--accent-primary)', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: teamAColor || '#2563eb', border: '1.5px solid rgba(255,255,255,0.7)', display: 'inline-block' }} />
+                        {teamAName} İstatistikleri
+                    </h3>
                     {teamA.length === 0 && <p style={{ color: 'var(--text-secondary)' }}>Oyuncu seçilmedi.</p>}
                     {teamA.map(player => (
                         <div key={player.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Link
+                                to={`/profile/${player.id}`}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    color: 'var(--text-primary)',
+                                    textDecoration: 'none',
+                                    fontWeight: '500'
+                                }}
+                                className="hover:underline"
+                                title="Oyuncu profilini ve son 5 maçlık performans grafiğini gör"
+                            >
                                 {formatPlayerDisplayName(player, currentUserId)}
                                 {player.isGoalkeeper && <Hand size={14} fill="gold" color="gold" />}
-                            </span>
+                            </Link>
                             <div style={{ display: 'flex', gap: '1rem' }}>
                                 <div style={{ textAlign: 'center' }}>
                                     <label style={{ fontSize: '0.7rem', display: 'block', color: 'var(--text-secondary)' }}>Gol</label>
@@ -723,14 +785,29 @@ const MatchDetail = () => {
 
                 {/* Team B Stats */}
                 <div className="card">
-                    <h3 style={{ color: 'var(--accent-secondary)', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>{teamBName} İstatistikleri</h3>
+                    <h3 style={{ color: teamBColor || 'var(--accent-secondary)', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: teamBColor || '#dc2626', border: '1.5px solid rgba(255,255,255,0.7)', display: 'inline-block' }} />
+                        {teamBName} İstatistikleri
+                    </h3>
                     {teamB.length === 0 && <p style={{ color: 'var(--text-secondary)' }}>Oyuncu seçilmedi.</p>}
                     {teamB.map(player => (
                         <div key={player.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Link
+                                to={`/profile/${player.id}`}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    color: 'var(--text-primary)',
+                                    textDecoration: 'none',
+                                    fontWeight: '500'
+                                }}
+                                className="hover:underline"
+                                title="Oyuncu profilini ve son 5 maçlık performans grafiğini gör"
+                            >
                                 {formatPlayerDisplayName(player, currentUserId)}
                                 {player.isGoalkeeper && <Hand size={14} fill="gold" color="gold" />}
-                            </span>
+                            </Link>
                             <div style={{ display: 'flex', gap: '1rem' }}>
                                 <div style={{ textAlign: 'center' }}>
                                     <label style={{ fontSize: '0.7rem', display: 'block', color: 'var(--text-secondary)' }}>Gol</label>

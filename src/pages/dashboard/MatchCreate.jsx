@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
-import { Calendar, MapPin, Clock } from 'lucide-react';
+import { MapPin, Clock, Palette, Shield } from 'lucide-react';
+import { PRESET_TEAM_COMBOS } from '../../components/TacticalBoard';
 
 const MatchCreate = () => {
     const { groupId } = useParams();
@@ -16,6 +17,10 @@ const MatchCreate = () => {
     const [minute, setMinute] = useState('00');
 
     const [venue, setVenue] = useState('');
+    const [teamAName, setTeamAName] = useState('Takım A');
+    const [teamBName, setTeamBName] = useState('Takım B');
+    const [teamAColor, setTeamAColor] = useState('#2563eb');
+    const [teamBColor, setTeamBColor] = useState('#dc2626');
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -26,7 +31,7 @@ const MatchCreate = () => {
         const formattedDay = day.toString().padStart(2, '0');
         const fullDate = `${year}-${formattedMonth}-${formattedDay}T${hour}:${minute}`;
 
-        createMatch(groupId, fullDate, venue, [], []);
+        createMatch(groupId, fullDate, venue, [], [], teamAName || 'Takım A', teamBName || 'Takım B', teamAColor, teamBColor);
         navigate(`/dashboard/groups/${groupId}`);
     };
 
@@ -119,6 +124,118 @@ const MatchCreate = () => {
                                 onChange={(e) => setVenue(e.target.value)}
                                 style={{ paddingLeft: '2.5rem' }}
                             />
+                        </div>
+                    </div>
+
+                    {/* Team Names & Jersey Colors Section */}
+                    <div style={{
+                        marginBottom: '1.5rem',
+                        padding: '1rem',
+                        background: 'rgba(255,255,255,0.03)',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--border-color)'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.85rem' }}>
+                            <Shield size={18} color="var(--accent-primary)" />
+                            <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>Takımlar ve Forma Renkleri</span>
+                        </div>
+
+                        {/* Team A and B Inputs */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '0.85rem' }}>
+                            {/* Team A */}
+                            <div style={{
+                                padding: '0.75rem',
+                                background: 'rgba(255,255,255,0.02)',
+                                borderRadius: 'var(--radius-sm)',
+                                border: `1px solid ${teamAColor}44`
+                            }}>
+                                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                                    1. Takım Adı & Rengi
+                                </label>
+                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                    <input
+                                        type="color"
+                                        value={teamAColor}
+                                        onChange={(e) => setTeamAColor(e.target.value)}
+                                        title="Takım A Forma Rengi"
+                                        style={{ width: '36px', height: '36px', padding: 0, border: '1px solid var(--border-color)', borderRadius: '6px', cursor: 'pointer', background: 'transparent' }}
+                                    />
+                                    <input
+                                        type="text"
+                                        value={teamAName}
+                                        onChange={(e) => setTeamAName(e.target.value)}
+                                        placeholder="Takım A"
+                                        style={{ flex: 1 }}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Team B */}
+                            <div style={{
+                                padding: '0.75rem',
+                                background: 'rgba(255,255,255,0.02)',
+                                borderRadius: 'var(--radius-sm)',
+                                border: `1px solid ${teamBColor}44`
+                            }}>
+                                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                                    2. Takım Adı & Rengi
+                                </label>
+                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                    <input
+                                        type="color"
+                                        value={teamBColor}
+                                        onChange={(e) => setTeamBColor(e.target.value)}
+                                        title="Takım B Forma Rengi"
+                                        style={{ width: '36px', height: '36px', padding: 0, border: '1px solid var(--border-color)', borderRadius: '6px', cursor: 'pointer', background: 'transparent' }}
+                                    />
+                                    <input
+                                        type="text"
+                                        value={teamBName}
+                                        onChange={(e) => setTeamBName(e.target.value)}
+                                        placeholder="Takım B"
+                                        style={{ flex: 1 }}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Quick Color Combos */}
+                        <div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                <Palette size={13} /> Hızlı Forma Kombinasyonu Seç:
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                                {PRESET_TEAM_COMBOS.slice(0, 6).map((combo, idx) => (
+                                    <button
+                                        key={idx}
+                                        type="button"
+                                        onClick={() => {
+                                            setTeamAColor(combo.colorA);
+                                            setTeamBColor(combo.colorB);
+                                        }}
+                                        style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.35rem',
+                                            padding: '0.25rem 0.5rem',
+                                            fontSize: '0.72rem',
+                                            borderRadius: '4px',
+                                            background: 'rgba(255,255,255,0.05)',
+                                            border: (teamAColor.toLowerCase() === combo.colorA.toLowerCase() && teamBColor.toLowerCase() === combo.colorB.toLowerCase())
+                                                ? '1px solid var(--accent-primary)'
+                                                : '1px solid rgba(255,255,255,0.1)',
+                                            color: 'var(--text-primary)',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        <span style={{ display: 'inline-flex', gap: '2px' }}>
+                                            <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: combo.colorA }} />
+                                            <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: combo.colorB }} />
+                                        </span>
+                                        <span>{combo.label}</span>
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     </div>
 

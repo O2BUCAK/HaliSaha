@@ -546,14 +546,44 @@ export const DataProvider = ({ children }) => {
             const isRemoving = score === '' || score === null || score === undefined || isNaN(parsedScore);
 
             if (isRemoving) {
-                await updateDoc(matchRef, {
-                    [updateKey]: deleteField()
-                });
+                try {
+                    await updateDoc(matchRef, {
+                        [updateKey]: deleteField()
+                    });
+                } catch {
+                    const snap = await getDoc(matchRef);
+                    if (snap.exists()) {
+                        const mData = snap.data();
+                        const currentRatings = { ...(mData.ratings || {}) };
+                        if (currentRatings[targetPlayerId]) {
+                            const pRatings = { ...currentRatings[targetPlayerId] };
+                            delete pRatings[voterId];
+                            currentRatings[targetPlayerId] = pRatings;
+                            await updateDoc(matchRef, { ratings: currentRatings });
+                        }
+                    }
+                }
             } else {
                 const finalScore = Math.max(1, Math.min(10, parsedScore));
-                await updateDoc(matchRef, {
-                    [updateKey]: finalScore
-                });
+                try {
+                    await updateDoc(matchRef, {
+                        [updateKey]: finalScore
+                    });
+                } catch (updateErr) {
+                    // Fallback if ratings map does not exist yet on document
+                    const snap = await getDoc(matchRef);
+                    if (snap.exists()) {
+                        const mData = snap.data();
+                        const currentRatings = { ...(mData.ratings || {}) };
+                        currentRatings[targetPlayerId] = {
+                            ...(currentRatings[targetPlayerId] || {}),
+                            [voterId]: finalScore
+                        };
+                        await updateDoc(matchRef, { ratings: currentRatings });
+                    } else {
+                        throw updateErr;
+                    }
+                }
             }
 
             // Optimistically update local matches state if present

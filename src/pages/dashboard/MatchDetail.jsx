@@ -4,7 +4,28 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { Trophy, Save, Users, UserPlus, Video, FileText, ExternalLink, Hand, Share2, Star, Trash2, Plus, ArrowLeft } from 'lucide-react';
+import {
+    Trophy,
+    Save,
+    Users,
+    UserPlus,
+    Video,
+    FileText,
+    ExternalLink,
+    Hand,
+    Share2,
+    Star,
+    Trash2,
+    Plus,
+    ArrowLeft,
+    CheckCircle2,
+    Sparkles,
+    Award,
+    Check,
+    ThumbsUp,
+    ChevronDown,
+    ChevronUp
+} from 'lucide-react';
 
 import TacticalBoard from '../../components/TacticalBoard';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -91,7 +112,7 @@ const MatchDetail = () => {
     // Stats State: { playerId: { goals: 0, assists: 0 } }
     const [playerStats, setPlayerStats] = useState(match?.stats || {});
 
-    const [isEditing, setIsEditing] = useState(match?.status !== 'played');
+    const [isEditing, setIsEditing] = useState(false);
     const [memberDetails, setMemberDetails] = useState([]);
     const [localRatings, setLocalRatings] = useState({});
     const [toast, setToast] = useState(null);
@@ -132,9 +153,21 @@ const MatchDetail = () => {
             setVideoUrls(match.videoUrls || (match.videoUrl ? [match.videoUrl] : []));
             setMatchSummary(match.matchSummary || '');
             setPlayerStats(match.stats || {});
-            setIsEditing(match.status !== 'played');
+
+            // Non-admin players should NEVER be forced into editing mode
+            const userIsAdmin = Boolean(
+                currentUser && group && (
+                    String(group.createdBy) === String(currentUser.uid || currentUser.id) ||
+                    (Array.isArray(group.admins) && group.admins.map(String).includes(String(currentUser.uid || currentUser.id)))
+                )
+            );
+            if (userIsAdmin) {
+                setIsEditing(match.status !== 'played');
+            } else {
+                setIsEditing(false);
+            }
         }
-    }, [match]);
+    }, [match, currentUser, group]);
 
     useEffect(() => {
         const fetchMembers = async () => {
@@ -307,7 +340,11 @@ const MatchDetail = () => {
     };
 
     const handleRate = async (playerId, score) => {
-        if (!currentUserId) return;
+        if (!currentUserId) {
+            setToast({ type: 'error', message: 'Puan vermek için giriş yapmalısınız.' });
+            setTimeout(() => setToast(null), 3000);
+            return;
+        }
 
         const val = score === '' ? '' : parseInt(score, 10);
 
@@ -329,8 +366,9 @@ const MatchDetail = () => {
             setToast({ type: 'error', message: result.error || 'Puan verilirken bir hata oluştu.' });
             setTimeout(() => setToast(null), 5000);
         } else {
-            setToast({ type: 'success', message: 'Puanınız başarıyla kaydedildi.' });
-            setTimeout(() => setToast(null), 3000);
+            const msg = val === '' ? 'Puanınız kaldırıldı.' : `⭐ ${val} puan başarıyla kaydedildi!`;
+            setToast({ type: 'success', message: msg });
+            setTimeout(() => setToast(null), 2500);
         }
     };
 
@@ -749,25 +787,30 @@ const MatchDetail = () => {
                     </h3>
                     {teamA.length === 0 && <p style={{ color: 'var(--text-secondary)' }}>Oyuncu seçilmedi.</p>}
                     {teamA.map(player => (
-                        <div key={player.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                        <div key={player.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', gap: '0.5rem' }}>
                             <Link
                                 to={`/profile/${player.id}`}
                                 style={{
                                     display: 'flex',
                                     alignItems: 'center',
-                                    gap: '0.5rem',
+                                    gap: '0.4rem',
                                     color: 'var(--text-primary)',
                                     textDecoration: 'none',
-                                    fontWeight: '500'
+                                    fontWeight: '500',
+                                    minWidth: 0,
+                                    flex: 1,
+                                    overflow: 'hidden'
                                 }}
                                 className="hover:underline"
                                 title="Oyuncu profilini ve son 5 maçlık performans grafiğini gör"
                             >
-                                {formatPlayerDisplayName(player, currentUserId)}
-                                {player.isGoalkeeper && <Hand size={14} fill="gold" color="gold" />}
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {formatPlayerDisplayName(player, currentUserId)}
+                                </span>
+                                {player.isGoalkeeper && <Hand size={14} fill="gold" color="gold" style={{ flexShrink: 0 }} />}
                             </Link>
-                            <div style={{ display: 'flex', gap: '1rem' }}>
-                                <div style={{ textAlign: 'center' }}>
+                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexShrink: 0 }}>
+                                <div style={{ width: '38px', textAlign: 'center', flexShrink: 0 }}>
                                     <label style={{ fontSize: '0.7rem', display: 'block', color: 'var(--text-secondary)' }}>Gol</label>
                                     {isEditing ? (
                                         <input
@@ -775,13 +818,13 @@ const MatchDetail = () => {
                                             min="0"
                                             value={playerStats[player.id]?.goals || 0}
                                             onChange={(e) => handleStatChange(player.id, 'goals', e.target.value)}
-                                            style={{ width: '50px', padding: '0.25rem', textAlign: 'center' }}
+                                            style={{ width: '38px', padding: '0.2rem', textAlign: 'center', boxSizing: 'border-box' }}
                                         />
                                     ) : (
                                         <span style={{ fontWeight: 'bold' }}>{playerStats[player.id]?.goals || 0}</span>
                                     )}
                                 </div>
-                                <div style={{ textAlign: 'center' }}>
+                                <div style={{ width: '38px', textAlign: 'center', flexShrink: 0 }}>
                                     <label style={{ fontSize: '0.7rem', display: 'block', color: 'var(--text-secondary)' }}>Asist</label>
                                     {isEditing ? (
                                         <input
@@ -789,13 +832,13 @@ const MatchDetail = () => {
                                             min="0"
                                             value={playerStats[player.id]?.assists || 0}
                                             onChange={(e) => handleStatChange(player.id, 'assists', e.target.value)}
-                                            style={{ width: '50px', padding: '0.25rem', textAlign: 'center' }}
+                                            style={{ width: '38px', padding: '0.2rem', textAlign: 'center', boxSizing: 'border-box' }}
                                         />
                                     ) : (
                                         <span style={{ fontWeight: 'bold' }}>{playerStats[player.id]?.assists || 0}</span>
                                     )}
                                 </div>
-                                <div style={{ textAlign: 'center' }}>
+                                <div style={{ width: '46px', textAlign: 'center', flexShrink: 0 }}>
                                     <label style={{ fontSize: '0.7rem', display: 'block', color: 'var(--text-secondary)' }}>Kurtarış</label>
                                     {isEditing ? (
                                         <input
@@ -803,38 +846,41 @@ const MatchDetail = () => {
                                             min="0"
                                             value={playerStats[player.id]?.saves || 0}
                                             onChange={(e) => handleStatChange(player.id, 'saves', e.target.value)}
-                                            style={{ width: '50px', padding: '0.25rem', textAlign: 'center' }}
+                                            style={{ width: '46px', padding: '0.2rem', textAlign: 'center', boxSizing: 'border-box' }}
                                         />
                                     ) : (
                                         <span style={{ fontWeight: 'bold' }}>{playerStats[player.id]?.saves || 0}</span>
                                     )}
                                 </div>
                                 {/* Rating Column */}
-                                <div style={{ marginLeft: '1rem', minWidth: '90px', textAlign: 'center' }}>
+                                <div style={{ width: '96px', textAlign: 'center', flexShrink: 0 }}>
                                     <label style={{ fontSize: '0.7rem', display: 'block', color: 'var(--text-secondary)' }}>
                                         Puan {getPlayerRatingData(player.id).count > 0 ? `(${getPlayerRatingData(player.id).count})` : ''}
                                     </label>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                                        <span style={{ fontWeight: 'bold', color: 'var(--accent-primary)' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '3px' }}>
+                                        <span style={{ fontWeight: 'bold', color: 'var(--accent-primary)', minWidth: '22px', textAlign: 'right' }}>
                                             {getPlayerRatingData(player.id).average}
                                         </span>
-                                        <Star size={12} fill="var(--accent-primary)" color="var(--accent-primary)" />
+                                        <Star size={12} fill="var(--accent-primary)" color="var(--accent-primary)" style={{ flexShrink: 0 }} />
                                         {/* Vote Input */}
-                                        {currentUser && String(player.id) !== currentUserId && !isEditing && (
+                                        {currentUser && String(player.id) !== currentUserId ? (
                                             <select
                                                 value={getMyVote(player.id)}
                                                 onChange={(e) => handleRate(player.id, e.target.value)}
                                                 title="Oyuncuya 1-10 arası puan verin"
                                                 style={{
                                                     marginLeft: '4px',
-                                                    width: '42px',
-                                                    padding: '2px',
+                                                    width: '46px',
+                                                    height: '28px',
+                                                    padding: '2px 4px',
                                                     fontSize: '0.8rem',
                                                     borderRadius: '4px',
-                                                    border: '1px solid var(--border-color)',
-                                                    background: 'var(--bg-secondary)',
-                                                    color: 'var(--text-primary)',
-                                                    cursor: 'pointer'
+                                                    border: getMyVote(player.id) ? '1px solid #f59e0b' : '1px solid var(--border-color)',
+                                                    background: getMyVote(player.id) ? 'rgba(245, 158, 11, 0.15)' : 'var(--bg-secondary)',
+                                                    color: getMyVote(player.id) ? '#f59e0b' : 'var(--text-primary)',
+                                                    fontWeight: getMyVote(player.id) ? 'bold' : 'normal',
+                                                    cursor: 'pointer',
+                                                    flexShrink: 0
                                                 }}
                                             >
                                                 <option value="">-</option>
@@ -842,6 +888,8 @@ const MatchDetail = () => {
                                                     <option key={i + 1} value={i + 1}>{i + 1}</option>
                                                 ))}
                                             </select>
+                                        ) : (
+                                            <div style={{ width: '46px', marginLeft: '4px', flexShrink: 0 }} />
                                         )}
                                     </div>
                                 </div>
@@ -858,25 +906,30 @@ const MatchDetail = () => {
                     </h3>
                     {teamB.length === 0 && <p style={{ color: 'var(--text-secondary)' }}>Oyuncu seçilmedi.</p>}
                     {teamB.map(player => (
-                        <div key={player.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                        <div key={player.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', gap: '0.5rem' }}>
                             <Link
                                 to={`/profile/${player.id}`}
                                 style={{
                                     display: 'flex',
                                     alignItems: 'center',
-                                    gap: '0.5rem',
+                                    gap: '0.4rem',
                                     color: 'var(--text-primary)',
                                     textDecoration: 'none',
-                                    fontWeight: '500'
+                                    fontWeight: '500',
+                                    minWidth: 0,
+                                    flex: 1,
+                                    overflow: 'hidden'
                                 }}
                                 className="hover:underline"
                                 title="Oyuncu profilini ve son 5 maçlık performans grafiğini gör"
                             >
-                                {formatPlayerDisplayName(player, currentUserId)}
-                                {player.isGoalkeeper && <Hand size={14} fill="gold" color="gold" />}
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {formatPlayerDisplayName(player, currentUserId)}
+                                </span>
+                                {player.isGoalkeeper && <Hand size={14} fill="gold" color="gold" style={{ flexShrink: 0 }} />}
                             </Link>
-                            <div style={{ display: 'flex', gap: '1rem' }}>
-                                <div style={{ textAlign: 'center' }}>
+                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexShrink: 0 }}>
+                                <div style={{ width: '38px', textAlign: 'center', flexShrink: 0 }}>
                                     <label style={{ fontSize: '0.7rem', display: 'block', color: 'var(--text-secondary)' }}>Gol</label>
                                     {isEditing ? (
                                         <input
@@ -884,13 +937,13 @@ const MatchDetail = () => {
                                             min="0"
                                             value={playerStats[player.id]?.goals || 0}
                                             onChange={(e) => handleStatChange(player.id, 'goals', e.target.value)}
-                                            style={{ width: '50px', padding: '0.25rem', textAlign: 'center' }}
+                                            style={{ width: '38px', padding: '0.2rem', textAlign: 'center', boxSizing: 'border-box' }}
                                         />
                                     ) : (
                                         <span style={{ fontWeight: 'bold' }}>{playerStats[player.id]?.goals || 0}</span>
                                     )}
                                 </div>
-                                <div style={{ textAlign: 'center' }}>
+                                <div style={{ width: '38px', textAlign: 'center', flexShrink: 0 }}>
                                     <label style={{ fontSize: '0.7rem', display: 'block', color: 'var(--text-secondary)' }}>Asist</label>
                                     {isEditing ? (
                                         <input
@@ -898,13 +951,13 @@ const MatchDetail = () => {
                                             min="0"
                                             value={playerStats[player.id]?.assists || 0}
                                             onChange={(e) => handleStatChange(player.id, 'assists', e.target.value)}
-                                            style={{ width: '50px', padding: '0.25rem', textAlign: 'center' }}
+                                            style={{ width: '38px', padding: '0.2rem', textAlign: 'center', boxSizing: 'border-box' }}
                                         />
                                     ) : (
                                         <span style={{ fontWeight: 'bold' }}>{playerStats[player.id]?.assists || 0}</span>
                                     )}
                                 </div>
-                                <div style={{ textAlign: 'center' }}>
+                                <div style={{ width: '46px', textAlign: 'center', flexShrink: 0 }}>
                                     <label style={{ fontSize: '0.7rem', display: 'block', color: 'var(--text-secondary)' }}>Kurtarış</label>
                                     {isEditing ? (
                                         <input
@@ -912,38 +965,41 @@ const MatchDetail = () => {
                                             min="0"
                                             value={playerStats[player.id]?.saves || 0}
                                             onChange={(e) => handleStatChange(player.id, 'saves', e.target.value)}
-                                            style={{ width: '50px', padding: '0.25rem', textAlign: 'center' }}
+                                            style={{ width: '46px', padding: '0.2rem', textAlign: 'center', boxSizing: 'border-box' }}
                                         />
                                     ) : (
                                         <span style={{ fontWeight: 'bold' }}>{playerStats[player.id]?.saves || 0}</span>
                                     )}
                                 </div>
                                 {/* Rating Column */}
-                                <div style={{ marginLeft: '1rem', minWidth: '90px', textAlign: 'center' }}>
+                                <div style={{ width: '96px', textAlign: 'center', flexShrink: 0 }}>
                                     <label style={{ fontSize: '0.7rem', display: 'block', color: 'var(--text-secondary)' }}>
                                         Puan {getPlayerRatingData(player.id).count > 0 ? `(${getPlayerRatingData(player.id).count})` : ''}
                                     </label>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                                        <span style={{ fontWeight: 'bold', color: 'var(--accent-primary)' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '3px' }}>
+                                        <span style={{ fontWeight: 'bold', color: 'var(--accent-primary)', minWidth: '22px', textAlign: 'right' }}>
                                             {getPlayerRatingData(player.id).average}
                                         </span>
-                                        <Star size={12} fill="var(--accent-primary)" color="var(--accent-primary)" />
+                                        <Star size={12} fill="var(--accent-primary)" color="var(--accent-primary)" style={{ flexShrink: 0 }} />
                                         {/* Vote Input */}
-                                        {currentUser && String(player.id) !== currentUserId && !isEditing && (
+                                        {currentUser && String(player.id) !== currentUserId ? (
                                             <select
                                                 value={getMyVote(player.id)}
                                                 onChange={(e) => handleRate(player.id, e.target.value)}
                                                 title="Oyuncuya 1-10 arası puan verin"
                                                 style={{
                                                     marginLeft: '4px',
-                                                    width: '42px',
-                                                    padding: '2px',
+                                                    width: '46px',
+                                                    height: '28px',
+                                                    padding: '2px 4px',
                                                     fontSize: '0.8rem',
                                                     borderRadius: '4px',
-                                                    border: '1px solid var(--border-color)',
-                                                    background: 'var(--bg-secondary)',
-                                                    color: 'var(--text-primary)',
-                                                    cursor: 'pointer'
+                                                    border: getMyVote(player.id) ? '1px solid #f59e0b' : '1px solid var(--border-color)',
+                                                    background: getMyVote(player.id) ? 'rgba(245, 158, 11, 0.15)' : 'var(--bg-secondary)',
+                                                    color: getMyVote(player.id) ? '#f59e0b' : 'var(--text-primary)',
+                                                    fontWeight: getMyVote(player.id) ? 'bold' : 'normal',
+                                                    cursor: 'pointer',
+                                                    flexShrink: 0
                                                 }}
                                             >
                                                 <option value="">-</option>
@@ -951,6 +1007,8 @@ const MatchDetail = () => {
                                                     <option key={i + 1} value={i + 1}>{i + 1}</option>
                                                 ))}
                                             </select>
+                                        ) : (
+                                            <div style={{ width: '46px', marginLeft: '4px', flexShrink: 0 }} />
                                         )}
                                     </div>
                                 </div>

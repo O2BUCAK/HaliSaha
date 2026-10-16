@@ -89,7 +89,8 @@ service cloud.firestore {
     // Matches collection
     match /matches/{matchId} {
       allow get: if true;
-      allow list: if true;
+      // Shared match links use document get; do not expose collection listing publicly.
+      allow list: if isSignedIn();
       
       // Only group admins can create matches
       allow create: if isSignedIn() && 

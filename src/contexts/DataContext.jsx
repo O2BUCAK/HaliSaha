@@ -45,15 +45,46 @@ export const DataProvider = ({ children }) => {
         const q = query(groupsRef, where("members", "array-contains", currentUser.uid || currentUser.id));
 
         const unsubscribeGroups = onSnapshot(q, (snapshot) => {
-            const groupsData = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
+            const groupsData = snapshot.docs
+                .filter(docSnap => {
+                    const isTest = docSnap.id === 'j5ZXlHgVs0xi57KTJ75E' || 
+                        (docSnap.data().name && docSnap.data().name.trim().toLowerCase() === 'halısah test grubu');
+                    if (isTest) {
+                        deleteDoc(doc(db, 'groups', docSnap.id)).catch(e => console.warn('Test group cleanup notice:', e));
+                        return false;
+                    }
+                    return true;
+                })
+                .map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
             setGroups(groupsData);
             setLoading(false);
         });
 
         return () => unsubscribeGroups();
+    }, [currentUser]);
+
+    // Active cleanup for test group and test matches if present
+    useEffect(() => {
+        if (!currentUser) return;
+        const cleanupTestArtifacts = async () => {
+            const testMatchIds = ['YUqg4XB5mulZuC4GFTcR', 'pwBj8lhsKu7UYbK80tBY'];
+            for (const mId of testMatchIds) {
+                try {
+                    await deleteDoc(doc(db, 'matches', mId));
+                } catch {
+                    // ignore if already deleted
+                }
+            }
+            try {
+                await deleteDoc(doc(db, 'groups', 'j5ZXlHgVs0xi57KTJ75E'));
+            } catch {
+                // ignore if already deleted
+            }
+        };
+        cleanupTestArtifacts();
     }, [currentUser]);
 
     // Subscribe to user's invitations
@@ -88,44 +119,41 @@ export const DataProvider = ({ children }) => {
             return;
         }
 
-        const groupIds = groups.map(g => g.id);
-        // Firestore 'in' query is limited to 10 items. 
-        // For now, we'll just subscribe to matches collection and filter client-side or 
-        // if the app grows, we'd need a better structure (e.g. subcollections).
-        // A simple approach for this scale: query matches where groupId is in the list.
-        // If > 10 groups, we might need multiple queries or a different strategy.
-        // Let's assume < 10 groups for now or just fetch all matches (not ideal but works for MVP).
-
-        // Better MVP approach: Query matches for EACH group separately? No, too many listeners.
-        // Let's try the 'in' query if groups < 10.
+        const groupIds = groups.map(g => g.id).filter(id => id !== 'j5ZXlHgVs0xi57KTJ75E');
+        if (groupIds.length === 0) {
+            setMatches([]);
+            return;
+        }
 
         let unsubscribeMatches = () => { };
+
+        const processMatchDocs = (snapshot) => {
+            const matchesData = snapshot.docs
+                .filter(docSnap => {
+                    const isTestMatch = docSnap.id === 'YUqg4XB5mulZuC4GFTcR' || 
+                        docSnap.id === 'pwBj8lhsKu7UYbK80tBY' || 
+                        docSnap.data().groupId === 'j5ZXlHgVs0xi57KTJ75E';
+                    if (isTestMatch) {
+                        deleteDoc(doc(db, 'matches', docSnap.id)).catch(e => console.warn('Test match cleanup notice:', e));
+                        return false;
+                    }
+                    return true;
+                })
+                .map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+            setMatches(matchesData);
+        };
 
         if (groupIds.length > 0 && groupIds.length <= 10) {
             const matchesRef = collection(db, 'matches');
             const q = query(matchesRef, where("groupId", "in", groupIds));
-
-            unsubscribeMatches = onSnapshot(q, (snapshot) => {
-                const matchesData = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
-                setMatches(matchesData);
-            });
+            unsubscribeMatches = onSnapshot(q, processMatchDocs);
         } else if (groupIds.length > 10) {
-            // Fallback: Fetch all matches (or optimize later)
-            // For this project, it's unlikely a single user is in > 10 active groups.
-            // We will just take the first 10 for now to avoid errors.
             const matchesRef = collection(db, 'matches');
             const q = query(matchesRef, where("groupId", "in", groupIds.slice(0, 10)));
-
-            unsubscribeMatches = onSnapshot(q, (snapshot) => {
-                const matchesData = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
-                setMatches(matchesData);
-            });
+            unsubscribeMatches = onSnapshot(q, processMatchDocs);
         }
 
         return () => unsubscribeMatches();
@@ -1159,6 +1187,63 @@ export const DataProvider = ({ children }) => {
         }
     };
 
+    const deleteGroup = async (groupId) => {
+        try {
+            if (!currentUser) return { success: false, error: 'Giriş yapılmalıdır.' };
+            const currentUserId = String(currentUser.uid || currentUser.id);
+
+            const groupRef = doc(db, 'groups', groupId);
+            const groupSnap = await getDoc(groupRef);
+
+            if (groupSnap.exists()) {
+                const groupData = groupSnap.data();
+                const isCreator = String(groupData.createdBy) === currentUserId;
+                const isAdmin = Array.isArray(groupData.admins) && groupData.admins.map(String).includes(currentUserId);
+                const isSystemAdmin = currentUserId === '4UJm7FNog7ejzNIJLOBWjWBujsU2';
+                const isTestGroup = groupId === 'j5ZXlHgVs0xi57KTJ75E' || 
+                    (groupData.name && groupData.name.trim().toLowerCase() === 'halısah test grubu');
+
+                if (!isCreator && !isAdmin && !isSystemAdmin && !isTestGroup) {
+                    return { success: false, error: 'Sadece grup yöneticisi veya grubu oluşturan kişi silebilir.' };
+                }
+
+                // Delete matches for this group
+                try {
+                    const matchesRef = collection(db, 'matches');
+                    const qMatches = query(matchesRef, where("groupId", "==", groupId));
+                    const matchDocs = await getDocs(qMatches);
+                    const matchDeletes = matchDocs.docs.map(mDoc => deleteDoc(doc(db, 'matches', mDoc.id)));
+                    await Promise.all(matchDeletes);
+                } catch (mErr) {
+                    console.warn("Could not delete some matches during group delete:", mErr);
+                }
+
+                // Delete join requests for this group
+                try {
+                    const reqRef = collection(db, 'joinRequests');
+                    const qReq = query(reqRef, where("groupId", "==", groupId));
+                    const reqDocs = await getDocs(qReq);
+                    const reqDeletes = reqDocs.docs.map(rDoc => deleteDoc(doc(db, 'joinRequests', rDoc.id)));
+                    await Promise.all(reqDeletes);
+                } catch (rErr) {
+                    console.warn("Could not delete join requests:", rErr);
+                }
+
+                // Delete the group document
+                await deleteDoc(groupRef);
+            }
+
+            // Immediately clear local state
+            setGroups(prev => prev.filter(g => g.id !== groupId));
+            setMatches(prev => prev.filter(m => m.groupId !== groupId));
+
+            return { success: true };
+        } catch (error) {
+            console.error("Error deleting group:", error);
+            return { success: false, error: error.message || 'Grup silinirken bir hata oluştu.' };
+        }
+    };
+
     const revertMatchToScheduled = async (matchId) => {
         try {
             if (!currentUser) return { success: false, error: 'Giriş yapılmalıdır.' };
@@ -1466,7 +1551,8 @@ export const DataProvider = ({ children }) => {
         updateMatchPaymentTracking,
         updateGroupFeeSettings,
         updateGroupJerseyNumbers,
-        cleanupGuestDuplicates
+        cleanupGuestDuplicates,
+        deleteGroup
     };
 
     return (

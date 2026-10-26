@@ -778,243 +778,427 @@ const MatchDetail = () => {
             )}
 
             {/* Player Stats */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
                 {/* Team A Stats */}
-                <div className="card">
-                    <h3 style={{ color: teamAColor || 'var(--accent-primary)', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: teamAColor || '#2563eb', border: '1.5px solid rgba(255,255,255,0.7)', display: 'inline-block' }} />
-                        {teamAName} İstatistikleri
-                    </h3>
-                    {teamA.length === 0 && <p style={{ color: 'var(--text-secondary)' }}>Oyuncu seçilmedi.</p>}
-                    {teamA.map(player => (
-                        <div key={player.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', gap: '0.5rem' }}>
-                            <Link
-                                to={`/profile/${player.id}`}
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.4rem',
-                                    color: 'var(--text-primary)',
-                                    textDecoration: 'none',
-                                    fontWeight: '500',
-                                    minWidth: 0,
-                                    flex: 1,
-                                    overflow: 'hidden'
-                                }}
-                                className="hover:underline"
-                                title="Oyuncu profilini ve son 5 maçlık performans grafiğini gör"
-                            >
-                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {formatPlayerDisplayName(player, currentUserId)}
-                                </span>
-                                {player.isGoalkeeper && <Hand size={14} fill="gold" color="gold" style={{ flexShrink: 0 }} />}
-                            </Link>
-                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexShrink: 0 }}>
-                                <div style={{ width: '38px', textAlign: 'center', flexShrink: 0 }}>
-                                    <label style={{ fontSize: '0.7rem', display: 'block', color: 'var(--text-secondary)' }}>Gol</label>
-                                    {isEditing ? (
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            value={playerStats[player.id]?.goals || 0}
-                                            onChange={(e) => handleStatChange(player.id, 'goals', e.target.value)}
-                                            style={{ width: '38px', padding: '0.2rem', textAlign: 'center', boxSizing: 'border-box' }}
-                                        />
-                                    ) : (
-                                        <span style={{ fontWeight: 'bold' }}>{playerStats[player.id]?.goals || 0}</span>
-                                    )}
-                                </div>
-                                <div style={{ width: '38px', textAlign: 'center', flexShrink: 0 }}>
-                                    <label style={{ fontSize: '0.7rem', display: 'block', color: 'var(--text-secondary)' }}>Asist</label>
-                                    {isEditing ? (
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            value={playerStats[player.id]?.assists || 0}
-                                            onChange={(e) => handleStatChange(player.id, 'assists', e.target.value)}
-                                            style={{ width: '38px', padding: '0.2rem', textAlign: 'center', boxSizing: 'border-box' }}
-                                        />
-                                    ) : (
-                                        <span style={{ fontWeight: 'bold' }}>{playerStats[player.id]?.assists || 0}</span>
-                                    )}
-                                </div>
-                                <div style={{ width: '46px', textAlign: 'center', flexShrink: 0 }}>
-                                    <label style={{ fontSize: '0.7rem', display: 'block', color: 'var(--text-secondary)' }}>Kurtarış</label>
-                                    {isEditing ? (
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            value={playerStats[player.id]?.saves || 0}
-                                            onChange={(e) => handleStatChange(player.id, 'saves', e.target.value)}
-                                            style={{ width: '46px', padding: '0.2rem', textAlign: 'center', boxSizing: 'border-box' }}
-                                        />
-                                    ) : (
-                                        <span style={{ fontWeight: 'bold' }}>{playerStats[player.id]?.saves || 0}</span>
-                                    )}
-                                </div>
-                                {/* Rating Column */}
-                                <div style={{ width: '96px', textAlign: 'center', flexShrink: 0 }}>
-                                    <label style={{ fontSize: '0.7rem', display: 'block', color: 'var(--text-secondary)' }}>
-                                        Puan {getPlayerRatingData(player.id).count > 0 ? `(${getPlayerRatingData(player.id).count})` : ''}
-                                    </label>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '3px' }}>
-                                        <span style={{ fontWeight: 'bold', color: 'var(--accent-primary)', minWidth: '22px', textAlign: 'right' }}>
-                                            {getPlayerRatingData(player.id).average}
-                                        </span>
-                                        <Star size={12} fill="var(--accent-primary)" color="var(--accent-primary)" style={{ flexShrink: 0 }} />
-                                        {/* Vote Input */}
-                                        {currentUser && String(player.id) !== currentUserId ? (
-                                            <select
-                                                value={getMyVote(player.id)}
-                                                onChange={(e) => handleRate(player.id, e.target.value)}
-                                                title="Oyuncuya 1-10 arası puan verin"
-                                                style={{
-                                                    marginLeft: '4px',
-                                                    width: '46px',
-                                                    height: '28px',
-                                                    padding: '2px 4px',
-                                                    fontSize: '0.8rem',
-                                                    borderRadius: '4px',
-                                                    border: getMyVote(player.id) ? '1px solid #f59e0b' : '1px solid var(--border-color)',
-                                                    background: getMyVote(player.id) ? 'rgba(245, 158, 11, 0.15)' : 'var(--bg-secondary)',
-                                                    color: getMyVote(player.id) ? '#f59e0b' : 'var(--text-primary)',
-                                                    fontWeight: getMyVote(player.id) ? 'bold' : 'normal',
-                                                    cursor: 'pointer',
-                                                    flexShrink: 0
-                                                }}
-                                            >
-                                                <option value="">-</option>
-                                                {[...Array(10)].map((_, i) => (
-                                                    <option key={i + 1} value={i + 1}>{i + 1}</option>
-                                                ))}
-                                            </select>
-                                        ) : (
-                                            <div style={{ width: '46px', marginLeft: '4px', flexShrink: 0 }} />
-                                        )}
-                                    </div>
-                                </div>
+                <div className="card" style={{ padding: '1.25rem' }}>
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginBottom: '1rem',
+                        borderBottom: '1px solid var(--border-color)',
+                        paddingBottom: '0.75rem'
+                    }}>
+                        <h3 style={{
+                            color: teamAColor || 'var(--accent-primary)',
+                            fontSize: '1.05rem',
+                            fontWeight: '700',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            margin: 0
+                        }}>
+                            <span style={{
+                                width: '12px',
+                                height: '12px',
+                                borderRadius: '50%',
+                                background: teamAColor || '#2563eb',
+                                border: '1.5px solid rgba(255,255,255,0.7)',
+                                display: 'inline-block'
+                            }} />
+                            {teamAName}
+                        </h3>
+                        <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                            {teamA.length} Oyuncu
+                        </span>
+                    </div>
+
+                    {teamA.length === 0 ? (
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', padding: '1rem 0' }}>Oyuncu seçilmedi.</p>
+                    ) : (
+                        <div>
+                            {/* Table Column Headers */}
+                            <div style={{
+                                display: 'grid',
+                                gridTemplateColumns: '1fr 38px 38px 46px 54px 64px',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                padding: '0.35rem 0.5rem',
+                                borderBottom: '1px solid var(--border-color)',
+                                fontSize: '0.72rem',
+                                fontWeight: '600',
+                                color: 'var(--text-secondary)',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.04em'
+                            }}>
+                                <span>Oyuncu</span>
+                                <span style={{ textAlign: 'center' }}>Gol</span>
+                                <span style={{ textAlign: 'center' }}>Asist</span>
+                                <span style={{ textAlign: 'center' }}>Kurt.</span>
+                                <span style={{ textAlign: 'center' }}>Ort.</span>
+                                <span style={{ textAlign: 'center' }}>Puan</span>
                             </div>
+
+                            {/* Player Rows */}
+                            {teamA.map(player => {
+                                const ratingData = getPlayerRatingData(player.id);
+                                const myVote = getMyVote(player.id);
+                                const isSelf = String(player.id) === currentUserId;
+
+                                return (
+                                    <div
+                                        key={player.id}
+                                        style={{
+                                            display: 'grid',
+                                            gridTemplateColumns: '1fr 38px 38px 46px 54px 64px',
+                                            alignItems: 'center',
+                                            gap: '0.35rem',
+                                            padding: '0.55rem 0.5rem',
+                                            borderBottom: '1px solid rgba(255,255,255,0.04)',
+                                            transition: 'background-color 0.15s ease'
+                                        }}
+                                        className="hover:bg-white/[0.02]"
+                                    >
+                                        {/* Player Name */}
+                                        <Link
+                                            to={`/profile/${player.id}`}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '0.35rem',
+                                                color: 'var(--text-primary)',
+                                                textDecoration: 'none',
+                                                fontWeight: '500',
+                                                fontSize: '0.88rem',
+                                                minWidth: 0,
+                                                overflow: 'hidden'
+                                            }}
+                                            className="hover:text-emerald-400"
+                                            title="Oyuncu profilini gör"
+                                        >
+                                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {formatPlayerDisplayName(player, currentUserId)}
+                                            </span>
+                                            {player.isGoalkeeper && (
+                                                <Hand size={13} fill="#f59e0b" color="#f59e0b" style={{ flexShrink: 0 }} />
+                                            )}
+                                        </Link>
+
+                                        {/* Goals */}
+                                        <div style={{ textAlign: 'center' }}>
+                                            {isEditing ? (
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    value={playerStats[player.id]?.goals || 0}
+                                                    onChange={(e) => handleStatChange(player.id, 'goals', e.target.value)}
+                                                    style={{ width: '36px', padding: '0.15rem', textAlign: 'center', fontSize: '0.82rem' }}
+                                                />
+                                            ) : (
+                                                <span className="tabular-nums" style={{ fontWeight: '600', fontSize: '0.88rem' }}>
+                                                    {playerStats[player.id]?.goals || 0}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {/* Assists */}
+                                        <div style={{ textAlign: 'center' }}>
+                                            {isEditing ? (
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    value={playerStats[player.id]?.assists || 0}
+                                                    onChange={(e) => handleStatChange(player.id, 'assists', e.target.value)}
+                                                    style={{ width: '36px', padding: '0.15rem', textAlign: 'center', fontSize: '0.82rem' }}
+                                                />
+                                            ) : (
+                                                <span className="tabular-nums" style={{ fontWeight: '600', fontSize: '0.88rem' }}>
+                                                    {playerStats[player.id]?.assists || 0}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {/* Saves */}
+                                        <div style={{ textAlign: 'center' }}>
+                                            {isEditing ? (
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    value={playerStats[player.id]?.saves || 0}
+                                                    onChange={(e) => handleStatChange(player.id, 'saves', e.target.value)}
+                                                    style={{ width: '42px', padding: '0.15rem', textAlign: 'center', fontSize: '0.82rem' }}
+                                                />
+                                            ) : (
+                                                <span className="tabular-nums" style={{ fontWeight: '600', fontSize: '0.88rem' }}>
+                                                    {playerStats[player.id]?.saves || 0}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {/* Average Rating */}
+                                        <div style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: '2px',
+                                            fontSize: '0.85rem'
+                                        }}>
+                                            <span className="tabular-nums" style={{
+                                                fontWeight: '700',
+                                                color: ratingData.count > 0 ? '#f59e0b' : 'var(--text-secondary)'
+                                            }}>
+                                                {ratingData.average}
+                                            </span>
+                                            <Star size={11} fill={ratingData.count > 0 ? '#f59e0b' : 'none'} color={ratingData.count > 0 ? '#f59e0b' : 'var(--text-muted)'} />
+                                        </div>
+
+                                        {/* Rating Vote Input */}
+                                        <div style={{ textAlign: 'center' }}>
+                                            {isSelf ? (
+                                                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>(Siz)</span>
+                                            ) : currentUser ? (
+                                                <select
+                                                    value={myVote}
+                                                    onChange={(e) => handleRate(player.id, e.target.value)}
+                                                    title={myVote ? `Verdiğiniz puan: ${myVote}/10 (Değiştirmek için seçin)` : '1-10 arası puan verin'}
+                                                    style={{
+                                                        width: '58px',
+                                                        height: '26px',
+                                                        padding: '1px 3px',
+                                                        fontSize: '0.78rem',
+                                                        borderRadius: '4px',
+                                                        border: myVote ? '1px solid #f59e0b' : '1px solid var(--border-color)',
+                                                        background: myVote ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                        color: myVote ? '#f59e0b' : 'var(--text-primary)',
+                                                        fontWeight: myVote ? '700' : 'normal',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                >
+                                                    <option value="">{myVote ? 'Sil' : 'Puan'}</option>
+                                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
+                                                        <option key={num} value={num}>{num} ★</option>
+                                                    ))}
+                                                </select>
+                                            ) : (
+                                                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>-</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
-                    ))}
+                    )}
                 </div>
 
                 {/* Team B Stats */}
-                <div className="card">
-                    <h3 style={{ color: teamBColor || 'var(--accent-secondary)', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: teamBColor || '#dc2626', border: '1.5px solid rgba(255,255,255,0.7)', display: 'inline-block' }} />
-                        {teamBName} İstatistikleri
-                    </h3>
-                    {teamB.length === 0 && <p style={{ color: 'var(--text-secondary)' }}>Oyuncu seçilmedi.</p>}
-                    {teamB.map(player => (
-                        <div key={player.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', gap: '0.5rem' }}>
-                            <Link
-                                to={`/profile/${player.id}`}
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.4rem',
-                                    color: 'var(--text-primary)',
-                                    textDecoration: 'none',
-                                    fontWeight: '500',
-                                    minWidth: 0,
-                                    flex: 1,
-                                    overflow: 'hidden'
-                                }}
-                                className="hover:underline"
-                                title="Oyuncu profilini ve son 5 maçlık performans grafiğini gör"
-                            >
-                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {formatPlayerDisplayName(player, currentUserId)}
-                                </span>
-                                {player.isGoalkeeper && <Hand size={14} fill="gold" color="gold" style={{ flexShrink: 0 }} />}
-                            </Link>
-                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexShrink: 0 }}>
-                                <div style={{ width: '38px', textAlign: 'center', flexShrink: 0 }}>
-                                    <label style={{ fontSize: '0.7rem', display: 'block', color: 'var(--text-secondary)' }}>Gol</label>
-                                    {isEditing ? (
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            value={playerStats[player.id]?.goals || 0}
-                                            onChange={(e) => handleStatChange(player.id, 'goals', e.target.value)}
-                                            style={{ width: '38px', padding: '0.2rem', textAlign: 'center', boxSizing: 'border-box' }}
-                                        />
-                                    ) : (
-                                        <span style={{ fontWeight: 'bold' }}>{playerStats[player.id]?.goals || 0}</span>
-                                    )}
-                                </div>
-                                <div style={{ width: '38px', textAlign: 'center', flexShrink: 0 }}>
-                                    <label style={{ fontSize: '0.7rem', display: 'block', color: 'var(--text-secondary)' }}>Asist</label>
-                                    {isEditing ? (
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            value={playerStats[player.id]?.assists || 0}
-                                            onChange={(e) => handleStatChange(player.id, 'assists', e.target.value)}
-                                            style={{ width: '38px', padding: '0.2rem', textAlign: 'center', boxSizing: 'border-box' }}
-                                        />
-                                    ) : (
-                                        <span style={{ fontWeight: 'bold' }}>{playerStats[player.id]?.assists || 0}</span>
-                                    )}
-                                </div>
-                                <div style={{ width: '46px', textAlign: 'center', flexShrink: 0 }}>
-                                    <label style={{ fontSize: '0.7rem', display: 'block', color: 'var(--text-secondary)' }}>Kurtarış</label>
-                                    {isEditing ? (
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            value={playerStats[player.id]?.saves || 0}
-                                            onChange={(e) => handleStatChange(player.id, 'saves', e.target.value)}
-                                            style={{ width: '46px', padding: '0.2rem', textAlign: 'center', boxSizing: 'border-box' }}
-                                        />
-                                    ) : (
-                                        <span style={{ fontWeight: 'bold' }}>{playerStats[player.id]?.saves || 0}</span>
-                                    )}
-                                </div>
-                                {/* Rating Column */}
-                                <div style={{ width: '96px', textAlign: 'center', flexShrink: 0 }}>
-                                    <label style={{ fontSize: '0.7rem', display: 'block', color: 'var(--text-secondary)' }}>
-                                        Puan {getPlayerRatingData(player.id).count > 0 ? `(${getPlayerRatingData(player.id).count})` : ''}
-                                    </label>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '3px' }}>
-                                        <span style={{ fontWeight: 'bold', color: 'var(--accent-primary)', minWidth: '22px', textAlign: 'right' }}>
-                                            {getPlayerRatingData(player.id).average}
-                                        </span>
-                                        <Star size={12} fill="var(--accent-primary)" color="var(--accent-primary)" style={{ flexShrink: 0 }} />
-                                        {/* Vote Input */}
-                                        {currentUser && String(player.id) !== currentUserId ? (
-                                            <select
-                                                value={getMyVote(player.id)}
-                                                onChange={(e) => handleRate(player.id, e.target.value)}
-                                                title="Oyuncuya 1-10 arası puan verin"
-                                                style={{
-                                                    marginLeft: '4px',
-                                                    width: '46px',
-                                                    height: '28px',
-                                                    padding: '2px 4px',
-                                                    fontSize: '0.8rem',
-                                                    borderRadius: '4px',
-                                                    border: getMyVote(player.id) ? '1px solid #f59e0b' : '1px solid var(--border-color)',
-                                                    background: getMyVote(player.id) ? 'rgba(245, 158, 11, 0.15)' : 'var(--bg-secondary)',
-                                                    color: getMyVote(player.id) ? '#f59e0b' : 'var(--text-primary)',
-                                                    fontWeight: getMyVote(player.id) ? 'bold' : 'normal',
-                                                    cursor: 'pointer',
-                                                    flexShrink: 0
-                                                }}
-                                            >
-                                                <option value="">-</option>
-                                                {[...Array(10)].map((_, i) => (
-                                                    <option key={i + 1} value={i + 1}>{i + 1}</option>
-                                                ))}
-                                            </select>
-                                        ) : (
-                                            <div style={{ width: '46px', marginLeft: '4px', flexShrink: 0 }} />
-                                        )}
-                                    </div>
-                                </div>
+                <div className="card" style={{ padding: '1.25rem' }}>
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginBottom: '1rem',
+                        borderBottom: '1px solid var(--border-color)',
+                        paddingBottom: '0.75rem'
+                    }}>
+                        <h3 style={{
+                            color: teamBColor || 'var(--accent-secondary)',
+                            fontSize: '1.05rem',
+                            fontWeight: '700',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            margin: 0
+                        }}>
+                            <span style={{
+                                width: '12px',
+                                height: '12px',
+                                borderRadius: '50%',
+                                background: teamBColor || '#dc2626',
+                                border: '1.5px solid rgba(255,255,255,0.7)',
+                                display: 'inline-block'
+                            }} />
+                            {teamBName}
+                        </h3>
+                        <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                            {teamB.length} Oyuncu
+                        </span>
+                    </div>
+
+                    {teamB.length === 0 ? (
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', padding: '1rem 0' }}>Oyuncu seçilmedi.</p>
+                    ) : (
+                        <div>
+                            {/* Table Column Headers */}
+                            <div style={{
+                                display: 'grid',
+                                gridTemplateColumns: '1fr 38px 38px 46px 54px 64px',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                padding: '0.35rem 0.5rem',
+                                borderBottom: '1px solid var(--border-color)',
+                                fontSize: '0.72rem',
+                                fontWeight: '600',
+                                color: 'var(--text-secondary)',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.04em'
+                            }}>
+                                <span>Oyuncu</span>
+                                <span style={{ textAlign: 'center' }}>Gol</span>
+                                <span style={{ textAlign: 'center' }}>Asist</span>
+                                <span style={{ textAlign: 'center' }}>Kurt.</span>
+                                <span style={{ textAlign: 'center' }}>Ort.</span>
+                                <span style={{ textAlign: 'center' }}>Puan</span>
                             </div>
+
+                            {/* Player Rows */}
+                            {teamB.map(player => {
+                                const ratingData = getPlayerRatingData(player.id);
+                                const myVote = getMyVote(player.id);
+                                const isSelf = String(player.id) === currentUserId;
+
+                                return (
+                                    <div
+                                        key={player.id}
+                                        style={{
+                                            display: 'grid',
+                                            gridTemplateColumns: '1fr 38px 38px 46px 54px 64px',
+                                            alignItems: 'center',
+                                            gap: '0.35rem',
+                                            padding: '0.55rem 0.5rem',
+                                            borderBottom: '1px solid rgba(255,255,255,0.04)',
+                                            transition: 'background-color 0.15s ease'
+                                        }}
+                                        className="hover:bg-white/[0.02]"
+                                    >
+                                        {/* Player Name */}
+                                        <Link
+                                            to={`/profile/${player.id}`}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '0.35rem',
+                                                color: 'var(--text-primary)',
+                                                textDecoration: 'none',
+                                                fontWeight: '500',
+                                                fontSize: '0.88rem',
+                                                minWidth: 0,
+                                                overflow: 'hidden'
+                                            }}
+                                            className="hover:text-emerald-400"
+                                            title="Oyuncu profilini gör"
+                                        >
+                                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {formatPlayerDisplayName(player, currentUserId)}
+                                            </span>
+                                            {player.isGoalkeeper && (
+                                                <Hand size={13} fill="#f59e0b" color="#f59e0b" style={{ flexShrink: 0 }} />
+                                            )}
+                                        </Link>
+
+                                        {/* Goals */}
+                                        <div style={{ textAlign: 'center' }}>
+                                            {isEditing ? (
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    value={playerStats[player.id]?.goals || 0}
+                                                    onChange={(e) => handleStatChange(player.id, 'goals', e.target.value)}
+                                                    style={{ width: '36px', padding: '0.15rem', textAlign: 'center', fontSize: '0.82rem' }}
+                                                />
+                                            ) : (
+                                                <span className="tabular-nums" style={{ fontWeight: '600', fontSize: '0.88rem' }}>
+                                                    {playerStats[player.id]?.goals || 0}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {/* Assists */}
+                                        <div style={{ textAlign: 'center' }}>
+                                            {isEditing ? (
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    value={playerStats[player.id]?.assists || 0}
+                                                    onChange={(e) => handleStatChange(player.id, 'assists', e.target.value)}
+                                                    style={{ width: '36px', padding: '0.15rem', textAlign: 'center', fontSize: '0.82rem' }}
+                                                />
+                                            ) : (
+                                                <span className="tabular-nums" style={{ fontWeight: '600', fontSize: '0.88rem' }}>
+                                                    {playerStats[player.id]?.assists || 0}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {/* Saves */}
+                                        <div style={{ textAlign: 'center' }}>
+                                            {isEditing ? (
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    value={playerStats[player.id]?.saves || 0}
+                                                    onChange={(e) => handleStatChange(player.id, 'saves', e.target.value)}
+                                                    style={{ width: '42px', padding: '0.15rem', textAlign: 'center', fontSize: '0.82rem' }}
+                                                />
+                                            ) : (
+                                                <span className="tabular-nums" style={{ fontWeight: '600', fontSize: '0.88rem' }}>
+                                                    {playerStats[player.id]?.saves || 0}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {/* Average Rating */}
+                                        <div style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: '2px',
+                                            fontSize: '0.85rem'
+                                        }}>
+                                            <span className="tabular-nums" style={{
+                                                fontWeight: '700',
+                                                color: ratingData.count > 0 ? '#f59e0b' : 'var(--text-secondary)'
+                                            }}>
+                                                {ratingData.average}
+                                            </span>
+                                            <Star size={11} fill={ratingData.count > 0 ? '#f59e0b' : 'none'} color={ratingData.count > 0 ? '#f59e0b' : 'var(--text-muted)'} />
+                                        </div>
+
+                                        {/* Rating Vote Input */}
+                                        <div style={{ textAlign: 'center' }}>
+                                            {isSelf ? (
+                                                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>(Siz)</span>
+                                            ) : currentUser ? (
+                                                <select
+                                                    value={myVote}
+                                                    onChange={(e) => handleRate(player.id, e.target.value)}
+                                                    title={myVote ? `Verdiğiniz puan: ${myVote}/10 (Değiştirmek için seçin)` : '1-10 arası puan verin'}
+                                                    style={{
+                                                        width: '58px',
+                                                        height: '26px',
+                                                        padding: '1px 3px',
+                                                        fontSize: '0.78rem',
+                                                        borderRadius: '4px',
+                                                        border: myVote ? '1px solid #f59e0b' : '1px solid var(--border-color)',
+                                                        background: myVote ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                        color: myVote ? '#f59e0b' : 'var(--text-primary)',
+                                                        fontWeight: myVote ? '700' : 'normal',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                >
+                                                    <option value="">{myVote ? 'Sil' : 'Puan'}</option>
+                                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
+                                                        <option key={num} value={num}>{num} ★</option>
+                                                    ))}
+                                                </select>
+                                            ) : (
+                                                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>-</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
-                    ))}
+                    )}
                 </div>
             </div>
 

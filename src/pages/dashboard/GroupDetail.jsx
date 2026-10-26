@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { toTitleCase, stripSenSuffix, formatPlayerDisplayName } from '../../utils';
@@ -11,13 +11,14 @@ import { Users, Calendar, Plus, Copy, Check, UserPlus, Trophy, Play, Square, Mai
 
 const GroupDetail = () => {
     const { groupId } = useParams();
+    const navigate = useNavigate();
     const {
         groups, getGroupMatches, getDeletedGroupMatches, addGuestMember, startSeason, endSeason,
         getSeasonStats, getAllTimeStats, assignMatchToSeason, removeMember,
         removeGuestMember, addAdmin, removeAdmin, getUsersDetails,
         fetchGroup, sendJoinRequest, getJoinRequests, respondToJoinRequest,
         updateGroupJerseyNumbers, mergeGuestToUser, cleanupGuestDuplicates,
-        deleteMatch, restoreMatch, permanentDeleteMatch, updateGroupFeeSettings
+        deleteMatch, restoreMatch, permanentDeleteMatch, updateGroupFeeSettings, deleteGroup
     } = useData();
     const { currentUser } = useAuth();
     const [fetchedGroup, setFetchedGroup] = useState(null);
@@ -571,6 +572,29 @@ const GroupDetail = () => {
         });
     };
 
+    const handleDeleteGroup = () => {
+        if (!isAdmin) return;
+        setConfirmModal({
+            isOpen: true,
+            title: 'Grubu ve Tüm Verilerini Sil',
+            message: `"${group.name}" adlı grubu ve bu gruba ait tüm maçları, istatistikleri ve katılım kayıtlarını kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`,
+            confirmText: 'Evet, Grubu Kalıcı Olarak Sil',
+            cancelText: 'Vazgeç',
+            isDanger: true,
+            isLoading: false,
+            error: null,
+            onConfirm: async () => {
+                setConfirmModal(prev => ({ ...prev, isLoading: true, error: null }));
+                const result = await deleteGroup(groupId);
+                if (result.success) {
+                    navigate('/dashboard/groups');
+                } else {
+                    setConfirmModal(prev => ({ ...prev, isLoading: false, error: result.error || 'Grup silinirken hata oluştu.' }));
+                }
+            }
+        });
+    };
+
     return (
         <div>
             {/* Header */}
@@ -612,11 +636,23 @@ const GroupDetail = () => {
                         )}
                     </div>
                 </div>
-                {isMember && (
-                    <Link to={`/dashboard/groups/${groupId}/matches/create`} className="btn btn-primary">
-                        <Plus size={18} /> Maç Oluştur
-                    </Link>
-                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    {isMember && (
+                        <Link to={`/dashboard/groups/${groupId}/matches/create`} className="btn btn-primary">
+                            <Plus size={18} /> Maç Oluştur
+                        </Link>
+                    )}
+                    {isAdmin && (
+                        <button
+                            onClick={handleDeleteGroup}
+                            className="btn btn-secondary text-red-400 hover:text-red-300 hover:border-red-500/50"
+                            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', borderColor: 'rgba(239, 68, 68, 0.35)' }}
+                            title="Grubu Kalıcı Olarak Sil"
+                        >
+                            <Trash2 size={16} /> Grubu Sil
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Season Section */}

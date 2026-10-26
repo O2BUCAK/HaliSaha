@@ -293,6 +293,7 @@ const FootballPitchSvg = ({ theme = 'classic' }) => {
     return (
         <svg
             viewBox="0 0 1000 625"
+            preserveAspectRatio="none"
             style={{
                 width: '100%',
                 height: '100%',
@@ -1472,6 +1473,7 @@ const TacticalBoard = ({ match, group, onSave, readOnly = false }) => {
                     const isSelected = selectedPlayerId === p.id;
                     const isTeamA = p.team === 'teamA';
                     const teamColor = isTeamA ? teamAColor : teamBColor;
+                    const textColor = getContrastTextColor(p.isGoalkeeper ? '#f59e0b' : teamColor);
 
                     return (
                         <div
@@ -1492,9 +1494,8 @@ const TacticalBoard = ({ match, group, onSave, readOnly = false }) => {
                                 top: `${p.y}%`,
                                 transform: 'translate(-50%, -50%)',
                                 cursor: readOnly ? 'default' : 'grab',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
+                                width: '38px',
+                                height: '38px',
                                 zIndex: isSelected ? 30 : 10,
                                 transition: activeDraggingId === p.id ? 'none' : 'transform 0.15s ease, left 0.2s ease, top 0.2s ease',
                                 touchAction: 'none'
@@ -1504,11 +1505,10 @@ const TacticalBoard = ({ match, group, onSave, readOnly = false }) => {
                             {isSelected && (
                                 <div style={{
                                     position: 'absolute',
-                                    top: '4px',
-                                    left: '50%',
-                                    transform: 'translateX(-50%)',
-                                    width: '48px',
-                                    height: '48px',
+                                    top: '-6px',
+                                    left: '-6px',
+                                    width: '50px',
+                                    height: '50px',
                                     borderRadius: '50%',
                                     border: '2px dashed var(--accent-primary)',
                                     animation: 'spin 4s linear infinite',
@@ -1516,35 +1516,56 @@ const TacticalBoard = ({ match, group, onSave, readOnly = false }) => {
                                 }} />
                             )}
 
-                            {/* Soccer Jersey Icon */}
-                            <SoccerJersey
-                                color={teamColor}
-                                number={showNumbers ? p.number : null}
-                                isGoalkeeper={p.isGoalkeeper}
-                                isSelected={isSelected}
-                                size={40}
-                            />
+                            {/* Classic Circular Tactical Token */}
+                            <div style={{
+                                width: '38px',
+                                height: '38px',
+                                borderRadius: '50%',
+                                backgroundColor: p.isGoalkeeper ? '#f59e0b' : teamColor,
+                                border: isSelected ? '2.5px solid var(--accent-primary)' : '2px solid #ffffff',
+                                boxShadow: isSelected
+                                    ? '0 0 16px rgba(16, 185, 129, 0.75), 0 4px 8px rgba(0,0,0,0.5)'
+                                    : '0 3px 8px rgba(0,0,0,0.45)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: textColor,
+                                fontWeight: '700',
+                                fontSize: '0.85rem',
+                                userSelect: 'none',
+                                boxSizing: 'border-box'
+                            }}>
+                                {p.isGoalkeeper ? (
+                                    <span style={{ fontSize: '13px' }}>🧤</span>
+                                ) : (
+                                    showNumbers ? (p.number || '•') : (p.name ? p.name.charAt(0).toUpperCase() : '•')
+                                )}
+                            </div>
 
-                            {/* Player Name Pill */}
+                            {/* Player Name Pill (positioned absolutely underneath without displacing the circle origin) */}
                             {showNames && (
                                 <div style={{
-                                    fontSize: '0.7rem',
+                                    position: 'absolute',
+                                    top: '41px',
+                                    left: '50%',
+                                    transform: 'translateX(-50%)',
+                                    fontSize: '0.72rem',
                                     fontWeight: '600',
                                     color: '#ffffff',
                                     background: isSelected
-                                        ? 'rgba(34, 197, 94, 0.95)'
-                                        : 'rgba(10, 10, 10, 0.78)',
-                                    border: `1px solid ${isSelected ? '#22c55e' : 'rgba(255,255,255,0.25)'}`,
+                                        ? 'rgba(16, 185, 129, 0.95)'
+                                        : 'rgba(15, 23, 42, 0.88)',
+                                    border: `1px solid ${isSelected ? '#10b981' : 'rgba(255,255,255,0.2)'}`,
                                     padding: '2px 7px',
-                                    borderRadius: '12px',
-                                    marginTop: '2px',
+                                    borderRadius: '10px',
                                     whiteSpace: 'nowrap',
-                                    maxWidth: '85px',
+                                    maxWidth: '90px',
                                     overflow: 'hidden',
                                     textOverflow: 'ellipsis',
-                                    boxShadow: '0 2px 5px rgba(0,0,0,0.6)',
+                                    boxShadow: '0 2px 6px rgba(0,0,0,0.5)',
                                     backdropFilter: 'blur(4px)',
-                                    lineHeight: '1.2'
+                                    lineHeight: '1.2',
+                                    pointerEvents: 'none'
                                 }}>
                                     {p.name}
                                 </div>

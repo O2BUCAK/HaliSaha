@@ -37,10 +37,14 @@ service cloud.firestore {
       return signedIn() &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ratings']) &&
         isGroupMember(resource.data.groupId) &&
-        resource.data.playerIds is list &&
-        request.auth.uid in resource.data.playerIds &&
         request.resource.data.ratings is map &&
-        request.resource.data.ratings.keys().hasOnly(resource.data.playerIds);
+        (
+          !('playerIds' in resource.data) ||
+          (
+            resource.data.playerIds is list &&
+            request.resource.data.ratings.keys().hasOnly(resource.data.playerIds)
+          )
+        );
     }
 
     match /{document=**} {

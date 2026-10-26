@@ -148,3 +148,52 @@ export const formatPlayerDisplayName = (playerOrName, currentUserId, playerId = 
     return titleCased;
 };
 
+/**
+ * Safely parses and formats match date strings into clean, readable Turkish date labels.
+ * Formats:
+ * - 'numeric': "01.03.2026"
+ * - 'short': "1 Mar"
+ * - 'text': "1 Mar 2026"
+ * - 'fullWithTime': "1 Mart 2026, 19:00"
+ */
+export const formatMatchDate = (dateVal, options = {}) => {
+    if (!dateVal) return '';
+    try {
+        let dateObj = null;
+        if (dateVal instanceof Date) {
+            dateObj = dateVal;
+        } else if (typeof dateVal === 'object' && dateVal.seconds) {
+            dateObj = new Date(dateVal.seconds * 1000);
+        } else if (typeof dateVal === 'string') {
+            const trimmed = dateVal.trim();
+            dateObj = new Date(trimmed);
+        }
+
+        if (!dateObj || isNaN(dateObj.getTime())) {
+            const str = String(dateVal);
+            const match = str.match(/(\d{4})-(\d{2})-(\d{2})/);
+            if (match) {
+                const [, y, m, d] = match;
+                return `${d}.${m}.${y}`;
+            }
+            return String(dateVal);
+        }
+
+        if (options.format === 'short') {
+            return dateObj.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
+        }
+        if (options.format === 'fullWithTime') {
+            const dateStr = dateObj.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+            const timeStr = dateObj.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+            return `${dateStr}, ${timeStr}`;
+        }
+        if (options.format === 'text') {
+            return dateObj.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' });
+        }
+        // Default: numeric "01.03.2026"
+        return dateObj.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    } catch {
+        return String(dateVal);
+    }
+};
+

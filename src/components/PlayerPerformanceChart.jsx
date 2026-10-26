@@ -27,6 +27,7 @@ import {
     Trophy,
     ExternalLink
 } from 'lucide-react';
+import { formatMatchDate } from '../utils';
 
 /**
  * Custom dark-themed tooltip for match performance chart
@@ -130,19 +131,9 @@ const formatPlayerMatches = (playerMatches, targetIdStr) => {
         cumulativeAssistsCounter += assists;
         cumulativeTotalCounter += total;
 
-        let dateLabel = `Maç ${idx + 1}`;
-        if (match.date) {
-            try {
-                const parts = match.date.split('-');
-                if (parts.length === 3) {
-                    dateLabel = `${parts[2]}.${parts[1]}`;
-                } else {
-                    dateLabel = match.date;
-                }
-            } catch {
-                dateLabel = match.date;
-            }
-        }
+        const dateLabel = formatMatchDate(match.date, { format: 'short' }) || `Maç ${idx + 1}`;
+        const displayDate = formatMatchDate(match.date, { format: 'numeric' }) || `Maç ${idx + 1}`;
+        const fullDate = formatMatchDate(match.date, { format: 'fullWithTime' }) || match.date || '';
 
         const scoreA = Number(match.score?.a);
         const scoreB = Number(match.score?.b);
@@ -180,8 +171,9 @@ const formatPlayerMatches = (playerMatches, targetIdStr) => {
 
         return {
             name: dateLabel,
+            displayDate,
             index: idx + 1,
-            fullDate: match.date || '',
+            fullDate,
             venue: match.venue || '',
             goals,
             assists,
@@ -739,7 +731,7 @@ const PlayerPerformanceChart = ({
                             <Link
                                 key={d.matchId || i}
                                 to={`/dashboard/matches/${d.matchId}`}
-                                title={`${d.fullDate || d.name} maçının detayına gitmek için tıklayın`}
+                                title={`${d.fullDate || d.displayDate} - ${d.venue || 'Halı Saha'}: ${d.goals}G, ${d.assists}A (${d.result || '-'}) - Detay için tıklayın`}
                                 style={{
                                     padding: '0.35rem 0.65rem',
                                     borderRadius: '6px',
@@ -765,7 +757,7 @@ const PlayerPerformanceChart = ({
                                     e.currentTarget.style.transform = 'translateY(0)';
                                 }}
                             >
-                                <span style={{ color: 'var(--text-secondary)' }}>{d.name}:</span>
+                                <span style={{ color: 'var(--text-secondary)', fontWeight: '500' }}>{d.displayDate || d.name}:</span>
                                 <strong style={{ color: '#10b981' }}>{d.goals}G</strong>
                                 <span style={{ color: 'var(--text-secondary)' }}>/</span>
                                 <strong style={{ color: '#06b6d4' }}>{d.assists}A</strong>
@@ -844,7 +836,7 @@ const PlayerPerformanceChart = ({
                                                 {allFormattedMatches.length - idx}
                                             </td>
                                             <td style={{ padding: '0.5rem 0.75rem', fontWeight: '500' }}>
-                                                {m.fullDate || m.name}
+                                                {m.fullDate || m.displayDate || m.name}
                                             </td>
                                             <td style={{ padding: '0.5rem 0.75rem', color: 'var(--text-secondary)' }}>
                                                 {m.venue || '-'}

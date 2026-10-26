@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { toTitleCase, stripSenSuffix, formatPlayerDisplayName } from '../../utils';
+import { toTitleCase, stripSenSuffix, formatPlayerDisplayName, formatMatchDate } from '../../utils';
 import InviteMember from '../../components/InviteMember';
 import AdSenseBanner from '../../components/AdSenseBanner';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -1275,7 +1275,7 @@ const GroupDetail = () => {
                                         >
                                             <div>
                                                 <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>
-                                                    {dm.venue || 'Halı Saha Maçı'} {dm.date ? `(${dm.date})` : ''}
+                                                    {dm.venue || 'Halı Saha Maçı'} {dm.date ? `(${formatMatchDate(dm.date, { format: 'numeric' })})` : ''}
                                                 </div>
                                                 <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                                                     {dm.score ? (

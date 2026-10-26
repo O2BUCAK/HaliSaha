@@ -942,7 +942,7 @@ export const DataProvider = ({ children }) => {
             venueCoordinates: venueDetails?.venueCoordinates || null,
             teamA: cleanTeamA,
             teamB: cleanTeamB,
-            playerIds: [...new Set([...cleanTeamA, ...cleanTeamB].map(p => p?.id).filter(id => typeof id === 'string' && !id.startsWith('guest_')))],
+            playerIds: [...new Set([...cleanTeamA, ...cleanTeamB].map(p => p?.id).filter(id => typeof id === 'string'))],
             teamAName,
             teamBName,
             teamAColor,
@@ -982,7 +982,7 @@ export const DataProvider = ({ children }) => {
                 stats: playerStats,
                 teamA: cleanTeamA,
                 teamB: cleanTeamB,
-                playerIds: [...new Set([...cleanTeamA, ...cleanTeamB].map(p => p?.id).filter(id => typeof id === 'string' && !id.startsWith('guest_')))],
+                playerIds: [...new Set([...cleanTeamA, ...cleanTeamB].map(p => p?.id).filter(id => typeof id === 'string'))],
                 teamAName,
                 teamBName,
                 teamAColor,
@@ -1310,7 +1310,7 @@ export const DataProvider = ({ children }) => {
             const updatePayload = {
                 teamA: cleanTeamA,
                 teamB: cleanTeamB,
-                playerIds: [...new Set([...cleanTeamA, ...cleanTeamB].map(p => p?.id).filter(id => typeof id === 'string' && !id.startsWith('guest_')))]
+                playerIds: [...new Set([...cleanTeamA, ...cleanTeamB].map(p => p?.id).filter(id => typeof id === 'string'))]
             };
 
             if (options.teamAColor) updatePayload.teamAColor = options.teamAColor;
